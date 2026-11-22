@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">X Folders</string>
+    <string name="bookmarks_title">العلامات المرجعية</string>
+    <string name="folders_title">المجلدات</string>
+    <string name="all_bookmarks">كل العلامات</string>
+    <string name="favorites">المفضلة</string>
+    <string name="save_tweet">حفظ التغريدة</string>
+    <string name="search_placeholder">بحث في التغريدات، الحسابات، الوسوم…</string>
+    <string name="no_bookmarks_found">لا توجد تغريدات محفوظة في هذا المجلد</string>
+    <string name="add_to_folder">إضافة إلى مجلد</string>
+</resources>
