@@ -79,6 +79,28 @@ jobs:
             --no-daemon \
             --stacktrace
 
+      # Verify APK before downloading
+      - name: Verify APK Signature and Package
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          echo "Checking APK file..."
+          test -s "$APK"
+
+          echo "Checking APK signature..."
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" \
+            verify --verbose --print-certs "$APK"
+
+          echo "Checking APK package information..."
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" \
+            dump badging "$APK" | head -n 20
+
+          echo "Checking APK alignment..."
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" \
+            -c -v 4 "$APK"
+
+          echo "APK verification completed successfully."
+          
       # 9. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
