@@ -30,7 +30,7 @@ jobs:
 
       # 3. Install Android SDK tools
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       # 4. Install required Android SDK platform
       - name: Install Android SDK 36.1
