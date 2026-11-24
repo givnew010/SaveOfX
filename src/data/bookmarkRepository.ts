@@ -1,4 +1,5 @@
 import type {
+  BackupPayload,
   FolderEntity,
   FolderWithCount,
   ParsedTweet,
@@ -8,6 +9,7 @@ import { TweetParser } from '../utils/tweetParser';
 
 const FOLDERS_STORAGE_KEY = 'xfolders_folders_v1';
 const BOOKMARKS_STORAGE_KEY = 'xfolders_bookmarks_v1';
+const LAST_BACKUP_STORAGE_KEY = 'xfolders_last_backup_at_v1';
 
 function nextId(items: { id: number }[]): number {
   return items.reduce((max, item) => (item.id > max ? item.id : max), 0) + 1;
@@ -59,7 +61,7 @@ export const BookmarkRepository = {
           name: 'العلامات المرجعية العامة',
           iconEmoji: '📌',
           colorHex: '#1D9BF0',
-          description: 'المجلد الافتراضي لجميع التغريدات غير المصنفة',
+          description: 'المجموعة الافتراضية لجميع التغريدات غير المصنفة',
           createdAt: now,
           isDefault: true,
         },
@@ -304,5 +306,229 @@ export const BookmarkRepository = {
       b.id === id ? { ...b, folderId: newFolderId } : b
     );
     writeBookmarks(bookmarks);
+  },
+
+  getLastBackupAt(): string | null {
+    try {
+      return localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  },
+
+  markBackupExported(): string {
+    const iso = new Date().toISOString();
+    try {
+      localStorage.setItem(LAST_BACKUP_STORAGE_KEY, iso);
+    } catch {
+      // ignore storage errors
+    }
+    return iso;
+  },
+
+  exportBackup(): BackupPayload {
+    return {
+      app: 'X Folders',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      folders: this.getAllFolders(),
+      bookmarks: this.getAllBookmarks(),
+    };
+  },
+
+  parseBackupJson(rawJson: string): BackupPayload | null {
+    try {
+      const parsed = JSON.parse(rawJson) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (!Array.isArray(parsed.folders) || !Array.isArray(parsed.bookmarks)) {
+        return null;
+      }
+
+      const now = Date.now();
+      const validFolders: FolderEntity[] = [];
+      for (const raw of parsed.folders) {
+        if (!raw || typeof raw !== 'object') continue;
+        const item = raw as Record<string, unknown>;
+        const name = typeof item.name === 'string' ? item.name.trim() : '';
+        if (!name) continue;
+        validFolders.push({
+          id: typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : validFolders.length + 1,
+          name,
+          iconEmoji: typeof item.iconEmoji === 'string' && item.iconEmoji.trim() ? item.iconEmoji : '📁',
+          colorHex: typeof item.colorHex === 'string' && item.colorHex.trim() ? item.colorHex : '#1D9BF0',
+          description: typeof item.description === 'string' ? item.description : '',
+          createdAt: typeof item.createdAt === 'number' && Number.isFinite(item.createdAt) ? item.createdAt : now,
+          isDefault: Boolean(item.isDefault),
+        });
+      }
+
+      const validBookmarks: TweetBookmarkEntity[] = [];
+      for (const raw of parsed.bookmarks) {
+        if (!raw || typeof raw !== 'object') continue;
+        const item = raw as Record<string, unknown>;
+        const tweetUrl = typeof item.tweetUrl === 'string' ? item.tweetUrl.trim() : '';
+        if (!tweetUrl) continue;
+        const mediaType =
+          item.mediaType === 'photo' || item.mediaType === 'video' || item.mediaType === 'gif'
+            ? item.mediaType
+            : undefined;
+        validBookmarks.push({
+          id: typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : validBookmarks.length + 1,
+          folderId: typeof item.folderId === 'number' && Number.isFinite(item.folderId) ? item.folderId : 1,
+          tweetUrl,
+          tweetId: typeof item.tweetId === 'string' ? item.tweetId : '',
+          authorName: typeof item.authorName === 'string' && item.authorName.trim() ? item.authorName : 'X User',
+          authorHandle: typeof item.authorHandle === 'string' && item.authorHandle.trim() ? item.authorHandle : '@x',
+          authorAvatarUrl: typeof item.authorAvatarUrl === 'string' ? item.authorAvatarUrl : undefined,
+          content: typeof item.content === 'string' ? item.content : tweetUrl,
+          mediaUrl: typeof item.mediaUrl === 'string' ? item.mediaUrl : undefined,
+          postedAt: typeof item.postedAt === 'string' ? item.postedAt : '',
+          savedAt: typeof item.savedAt === 'number' && Number.isFinite(item.savedAt) ? item.savedAt : now,
+          userNote: typeof item.userNote === 'string' && item.userNote.trim() ? item.userNote : undefined,
+          tags: typeof item.tags === 'string' ? item.tags : '',
+          isFavorite: Boolean(item.isFavorite),
+          likesCount: typeof item.likesCount === 'number' && Number.isFinite(item.likesCount) ? item.likesCount : 0,
+          repostsCount: typeof item.repostsCount === 'number' && Number.isFinite(item.repostsCount) ? item.repostsCount : 0,
+          isContentFetched: Boolean(item.isContentFetched),
+          mediaType,
+          mediaJson: typeof item.mediaJson === 'string' ? item.mediaJson : undefined,
+          quoteAuthorName: typeof item.quoteAuthorName === 'string' ? item.quoteAuthorName : undefined,
+          quoteAuthorHandle: typeof item.quoteAuthorHandle === 'string' ? item.quoteAuthorHandle : undefined,
+          quoteText: typeof item.quoteText === 'string' ? item.quoteText : undefined,
+        });
+      }
+
+      if (validFolders.length === 0 && validBookmarks.length === 0) {
+        return null;
+      }
+
+      return {
+        app: typeof parsed.app === 'string' ? parsed.app : 'X Folders',
+        version: typeof parsed.version === 'number' ? parsed.version : 1,
+        exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : new Date().toISOString(),
+        folders: validFolders,
+        bookmarks: validBookmarks,
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  restoreBackup(
+    payload: BackupPayload,
+    mode: 'replace' | 'merge'
+  ): { foldersAdded: number; bookmarksAdded: number } {
+    if (mode === 'replace') {
+      let folders: FolderEntity[] = payload.folders.map((f, idx) => ({
+        ...f,
+        id: f.id > 0 ? f.id : idx + 1,
+      }));
+
+      // Ensure unique folder IDs
+      const seenFolderIds = new Set<number>();
+      const folderIdMap = new Map<number, number>();
+      let maxFolderId = folders.reduce((m, f) => Math.max(m, f.id), 0);
+      folders = folders.map((f) => {
+        if (!seenFolderIds.has(f.id)) {
+          seenFolderIds.add(f.id);
+          folderIdMap.set(f.id, f.id);
+          return f;
+        }
+        const newId = ++maxFolderId;
+        folderIdMap.set(f.id, newId);
+        return { ...f, id: newId };
+      });
+
+      if (folders.length === 0) {
+        folders = [
+          {
+            id: 1,
+            name: 'العلامات المرجعية العامة',
+            iconEmoji: '📌',
+            colorHex: '#1D9BF0',
+            description: 'المجموعة الافتراضية لجميع التغريدات غير المصنفة',
+            createdAt: Date.now(),
+            isDefault: true,
+          },
+        ];
+      }
+
+      if (!folders.some((f) => f.isDefault)) {
+        folders[0] = { ...folders[0], isDefault: true };
+      }
+
+      const defaultFolderId = folders.find((f) => f.isDefault)?.id ?? folders[0].id;
+      const validFolderIdSet = new Set(folders.map((f) => f.id));
+
+      const bookmarks: TweetBookmarkEntity[] = payload.bookmarks.map((b, idx) => {
+        const mappedFolderId = folderIdMap.get(b.folderId) ?? b.folderId;
+        return {
+          ...b,
+          id: idx + 1,
+          folderId: validFolderIdSet.has(mappedFolderId) ? mappedFolderId : defaultFolderId,
+        };
+      });
+
+      writeFolders(folders);
+      writeBookmarks(bookmarks);
+      return { foldersAdded: folders.length, bookmarksAdded: bookmarks.length };
+    }
+
+    // Merge mode
+    const existingFolders = readFolders();
+    const existingBookmarks = readBookmarks();
+
+    const defaultFolder =
+      existingFolders.find((f) => f.isDefault) ?? existingFolders[0];
+    const defaultFolderId = defaultFolder?.id ?? 1;
+
+    const folderIdMap = new Map<number, number>();
+    let nextFolderId = nextId(existingFolders);
+    const mergedFolders = [...existingFolders];
+    let foldersAdded = 0;
+
+    for (const incoming of payload.folders) {
+      const matchByDefault = incoming.isDefault && defaultFolder;
+      const matchByName = existingFolders.find(
+        (ef) => ef.name.trim().toLowerCase() === incoming.name.trim().toLowerCase()
+      );
+      const matched = matchByDefault ? defaultFolder : matchByName;
+      if (matched) {
+        folderIdMap.set(incoming.id, matched.id);
+      } else {
+        const assignedId = nextFolderId++;
+        folderIdMap.set(incoming.id, assignedId);
+        mergedFolders.push({
+          ...incoming,
+          id: assignedId,
+          isDefault: false,
+        });
+        foldersAdded += 1;
+      }
+    }
+
+    const existingUrlSet = new Set(
+      existingBookmarks.map((b) => b.tweetUrl.trim().toLowerCase())
+    );
+    let nextBookmarkId = nextId(existingBookmarks);
+    const mergedBookmarks = [...existingBookmarks];
+    let bookmarksAdded = 0;
+
+    for (const incoming of payload.bookmarks) {
+      const normalizedUrl = incoming.tweetUrl.trim().toLowerCase();
+      if (existingUrlSet.has(normalizedUrl)) continue;
+      existingUrlSet.add(normalizedUrl);
+      const targetFolderId = folderIdMap.get(incoming.folderId) ?? defaultFolderId;
+      mergedBookmarks.push({
+        ...incoming,
+        id: nextBookmarkId++,
+        folderId: targetFolderId,
+      });
+      bookmarksAdded += 1;
+    }
+
+    writeFolders(mergedFolders);
+    writeBookmarks(mergedBookmarks);
+    return { foldersAdded, bookmarksAdded };
   },
 };

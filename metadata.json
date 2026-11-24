@@ -1,6 +1,6 @@
 {
   "name": "X Folders",
-  "description": "تطبيق متطور لحفظ وتنظيم منشورات وتغريدات منصة X في مجلدات ومجموعات عبر ميزة المشاركة المباشرة",
+  "description": "تطبيق متطور لحفظ وتنظيم منشورات وتغريدات منصة X في مجموعات مخصصة عبر ميزة المشاركة المباشرة",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

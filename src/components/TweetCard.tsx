@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BadgeCheck,
   CloudOff,
@@ -50,8 +50,33 @@ export function TweetCard({
   onFeedback,
 }: TweetCardProps) {
   const [avatarError, setAvatarError] = useState(false);
+  const [isTextExpanded, setIsTextExpanded] = useState(false);
+  const [isTextTruncated, setIsTextTruncated] = useState(false);
+  const contentRef = useRef<HTMLParagraphElement | null>(null);
+
   const folderColor = folder?.colorHex || '#1D9BF0';
   const initial = bookmark.authorName.trim().slice(0, 1) || '𝕏';
+
+  useEffect(() => {
+    setIsTextExpanded(false);
+    setIsTextTruncated(false);
+  }, [bookmark.id, bookmark.content]);
+
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el || isTextExpanded) return;
+
+    const checkOverflow = () => {
+      setIsTextTruncated(el.scrollHeight > el.clientHeight + 1);
+    };
+
+    checkOverflow();
+
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [bookmark.content, bookmark.isContentFetched, isTextExpanded]);
 
   const mediaItems: TweetMediaItem[] = useMemo(() => {
     const parsed = TweetParser.deserializeMediaItems(bookmark.mediaJson);
@@ -199,12 +224,26 @@ export function TweetCard({
           {bookmark.isContentFetched ? (
             <>
               {bookmark.content.trim() && bookmark.content !== bookmark.tweetUrl && (
-                <p
-                  dir="auto"
-                  className="text-[15px] leading-[1.6] text-[#0F1419] dark:text-[#F0F6FC] whitespace-pre-line break-words"
-                >
-                  {bookmark.content}
-                </p>
+                <div>
+                  <p
+                    ref={contentRef}
+                    dir="auto"
+                    className={`text-[15px] leading-[1.6] text-[#0F1419] dark:text-[#F0F6FC] whitespace-pre-line break-words ${
+                      isTextExpanded ? '' : 'line-clamp-6'
+                    }`}
+                  >
+                    {bookmark.content}
+                  </p>
+                  {(isTextTruncated || isTextExpanded) && (
+                    <button
+                      type="button"
+                      onClick={() => setIsTextExpanded((prev) => !prev)}
+                      className="mt-1 inline-block text-sm font-medium text-[#1D9BF0] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0] rounded"
+                    >
+                      {isTextExpanded ? 'عرض أقل' : 'عرض المزيد'}
+                    </button>
+                  )}
+                </div>
               )}
 
               {mediaItems.length > 0 && (
@@ -355,8 +394,8 @@ export function TweetCard({
           <button
             type="button"
             onClick={onMoveToFolder}
-            aria-label="تغيير المجلد"
-            title="تغيير المجلد"
+            aria-label="تغيير المجموعة"
+            title="تغيير المجموعة"
             className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-[#536471] dark:text-[#8B949E] hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
           >
             <FolderInput className="w-5 h-5" />

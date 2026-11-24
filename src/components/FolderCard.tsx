@@ -66,8 +66,8 @@ export function FolderCard({ item, onClick, onEdit, onDelete }: FolderCardProps)
           <button
             type="button"
             onClick={onEdit}
-            aria-label="تعديل المجلد"
-            title="تعديل المجلد"
+            aria-label="تعديل المجموعة"
+            title="تعديل المجموعة"
             className="min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-[#536471] dark:text-[#8B949E] hover:bg-[#EFF3F4] dark:hover:bg-[#21262D] transition-colors"
           >
             <Pencil className="w-[18px] h-[18px]" />
@@ -77,8 +77,8 @@ export function FolderCard({ item, onClick, onEdit, onDelete }: FolderCardProps)
             <button
               type="button"
               onClick={onDelete}
-              aria-label="حذف المجلد"
-              title="حذف المجلد"
+              aria-label="حذف المجموعة"
+              title="حذف المجموعة"
               className="min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-[#EF4444]/85 hover:bg-[#EF4444]/10 transition-colors"
             >
               <Trash2 className="w-[18px] h-[18px]" />

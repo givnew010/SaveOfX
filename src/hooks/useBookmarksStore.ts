@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookmarkRepository } from '../data/bookmarkRepository';
 import type {
+  BackupPayload,
   FolderEntity,
   FolderWithCount,
   MainTab,
@@ -38,6 +39,9 @@ export function useBookmarksStore() {
   const [folderToDelete, setFolderToDelete] = useState<FolderWithCount | null>(null);
   const [bookmarkToMove, setBookmarkToMove] = useState<TweetBookmarkEntity | null>(null);
   const [userFeedbackMessage, setUserFeedbackMessage] = useState<string | null>(null);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(() =>
+    BookmarkRepository.getLastBackupAt()
+  );
 
   const previewFetchTimerRef = useRef<number | null>(null);
   const previewRequestSeqRef = useRef(0);
@@ -335,7 +339,7 @@ export function useBookmarksStore() {
     closeSaveSheet();
     showFeedback(
       saved.isContentFetched
-        ? 'تم حفظ التغريدة ومحتواها في المجلد بنجاح'
+        ? 'تم حفظ التغريدة ومحتواها في المجموعة بنجاح'
         : 'تم حفظ الرابط (سيتم جلب المحتوى عند توفر الإنترنت)'
     );
 
@@ -368,7 +372,7 @@ export function useBookmarksStore() {
       BookmarkRepository.moveBookmark(bookmarkToMove.id, newFolderId);
       reloadFromRepo();
       setBookmarkToMove(null);
-      showFeedback('تم نقل التغريدة إلى المجلد الجديد');
+      showFeedback('تم نقل التغريدة إلى المجموعة الجديدة');
     },
     [bookmarkToMove, reloadFromRepo, showFeedback]
   );
@@ -395,7 +399,7 @@ export function useBookmarksStore() {
       reloadFromRepo();
       setShowCreateFolderDialog(false);
       setPendingSelectedFolderId(created.id);
-      showFeedback('تم إنشاء المجلد بنجاح');
+      showFeedback('تم إنشاء المجموعة بنجاح');
     },
     [reloadFromRepo, showFeedback]
   );
@@ -418,7 +422,7 @@ export function useBookmarksStore() {
       });
       reloadFromRepo();
       setFolderToEdit(null);
-      showFeedback('تم تحديث بيانات المجلد');
+      showFeedback('تم تحديث بيانات المجموعة');
     },
     [reloadFromRepo, showFeedback]
   );
@@ -432,9 +436,36 @@ export function useBookmarksStore() {
       }
       reloadFromRepo();
       setFolderToDelete(null);
-      showFeedback('تم حذف المجلد بنجاح');
+      showFeedback('تم حذف المجموعة بنجاح');
     },
     [folderToDelete, selectedFolderId, reloadFromRepo, showFeedback]
+  );
+
+  const exportBackupData = useCallback((): BackupPayload => {
+    const payload = BookmarkRepository.exportBackup();
+    const timestamp = BookmarkRepository.markBackupExported();
+    setLastBackupAt(timestamp);
+    return payload;
+  }, []);
+
+  const restoreBackupData = useCallback(
+    (payload: BackupPayload, mode: 'replace' | 'merge') => {
+      const result = BookmarkRepository.restoreBackup(payload, mode);
+      reloadFromRepo();
+      setSelectedFolderId(null);
+      setShowFavoritesOnly(false);
+      if (mode === 'replace') {
+        showFeedback(
+          `تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية بنجاح`
+        );
+      } else {
+        showFeedback(
+          `تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية جديدة`
+        );
+      }
+      return result;
+    },
+    [reloadFromRepo, showFeedback]
   );
 
   return {
@@ -459,6 +490,7 @@ export function useBookmarksStore() {
     folderToDelete,
     bookmarkToMove,
     userFeedbackMessage,
+    lastBackupAt,
     setActiveTab,
     selectFolder,
     toggleFavoritesOnly,
@@ -488,5 +520,7 @@ export function useBookmarksStore() {
     promptDeleteFolder: setFolderToDelete,
     closeDeleteFolderDialog: () => setFolderToDelete(null),
     confirmDeleteFolder,
+    exportBackupData,
+    restoreBackupData,
   };
 }

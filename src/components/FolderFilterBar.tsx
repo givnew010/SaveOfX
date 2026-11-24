@@ -70,7 +70,7 @@ export function FolderFilterBar({
           className="shrink-0 min-h-[40px] px-3.5 py-2 rounded-full border border-[#E2E8F0] dark:border-[#30363D] bg-[#EFF3F4]/70 dark:bg-[#21262D]/70 hover:bg-[#EFF3F4] dark:hover:bg-[#21262D] text-[#1D9BF0] text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0]"
         >
           <Plus className="w-4 h-4" />
-          <span>مجلد جديد</span>
+          <span>مجموعة جديدة</span>
         </button>
       </div>
     </div>

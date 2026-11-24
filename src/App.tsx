@@ -9,6 +9,7 @@ import {
 } from './components/FolderDialogs';
 import { FolderFilterBar } from './components/FolderFilterBar';
 import { SaveBookmarkSheet } from './components/SaveBookmarkSheet';
+import { SettingsView } from './components/SettingsView';
 import { TopAppBarSection } from './components/TopAppBarSection';
 import { TweetCard } from './components/TweetCard';
 import { useBookmarksStore } from './hooks/useBookmarksStore';
@@ -114,7 +115,7 @@ export function App() {
               )}
             </div>
           </>
-        ) : (
+        ) : store.activeTab === 'FOLDERS' ? (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 space-y-4">
             <FoldersManagerHeader
               totalFolders={store.folders.length}
@@ -134,31 +135,44 @@ export function App() {
               ))}
             </div>
           </div>
+        ) : (
+          <SettingsView
+            totalFolders={store.folders.length}
+            totalBookmarks={store.totalBookmarksCount}
+            lastBackupAt={store.lastBackupAt}
+            isDarkMode={isDarkMode}
+            onSetDarkMode={setIsDarkMode}
+            onExportBackup={store.exportBackupData}
+            onRestoreBackup={store.restoreBackupData}
+            onFeedback={store.showFeedback}
+          />
         )}
       </main>
 
       {/* Floating Action Button */}
-      <div className="fixed bottom-5 left-5 sm:bottom-7 sm:left-7 z-30">
-        {store.activeTab === 'BOOKMARKS' ? (
-          <button
-            type="button"
-            onClick={() => store.openManualAddSheet()}
-            className="h-14 px-5 rounded-2xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white font-bold text-sm sm:text-base shadow-lg shadow-[#1D9BF0]/30 flex items-center gap-2 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0]"
-          >
-            <Plus className="w-5 h-5" />
-            <span>حفظ منشور</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={store.openCreateFolderDialog}
-            aria-label="إنشاء مجلد جديد"
-            className="w-14 h-14 rounded-2xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white shadow-lg shadow-[#1D9BF0]/30 flex items-center justify-center transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0]"
-          >
-            <FolderPlus className="w-6 h-6" />
-          </button>
-        )}
-      </div>
+      {store.activeTab !== 'SETTINGS' && (
+        <div className="fixed bottom-5 left-5 sm:bottom-7 sm:left-7 z-30">
+          {store.activeTab === 'BOOKMARKS' ? (
+            <button
+              type="button"
+              onClick={() => store.openManualAddSheet()}
+              className="h-14 px-5 rounded-2xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white font-bold text-sm sm:text-base shadow-lg shadow-[#1D9BF0]/30 flex items-center gap-2 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0]"
+            >
+              <Plus className="w-5 h-5" />
+              <span>حفظ منشور</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={store.openCreateFolderDialog}
+              aria-label="إنشاء مجموعة جديدة"
+              className="w-14 h-14 rounded-2xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white shadow-lg shadow-[#1D9BF0]/30 flex items-center justify-center transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0]"
+            >
+              <FolderPlus className="w-6 h-6" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Snackbar Notification */}
       {store.userFeedbackMessage && (
@@ -251,7 +265,7 @@ function FoldersManagerHeader({
               مجموعات العلامات المرجعية
             </h2>
             <p className="text-xs text-[#536471] dark:text-[#8B949E] tabular-nums">
-              {totalFolders} مجلدات · {totalBookmarks} علامة مرجعية
+              {totalFolders} مجموعات · {totalBookmarks} علامة مرجعية
             </p>
           </div>
         </div>
@@ -262,12 +276,12 @@ function FoldersManagerHeader({
           className="min-h-[38px] px-3.5 py-1.5 rounded-lg bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white text-xs font-bold flex items-center gap-1.5 transition-colors whitespace-nowrap"
         >
           <Plus className="w-4 h-4" />
-          <span>مجلد جديد</span>
+          <span>مجموعة جديدة</span>
         </button>
       </div>
 
       <p className="text-xs sm:text-sm text-[#536471] dark:text-[#8B949E] leading-relaxed">
-        ميزة مجلدات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك المفضلة وسهولة الرجوع إليها في أي وقت.
+        ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك المفضلة وسهولة الرجوع إليها في أي وقت.
       </p>
     </div>
   );
@@ -307,7 +321,7 @@ function EmptyBookmarksView({
       ) : (
         <>
           <h3 className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]">
-            لا توجد علامات مرجعية في هذا المجلد
+            لا توجد علامات مرجعية في هذه المجموعة
           </h3>
           <p className="text-sm text-[#536471] dark:text-[#8B949E] leading-relaxed">
             يمكنك حفظ أي تغريدة مباشرة من منصة 𝕏 عبر لصق رابط التغريدة هنا أو فتح التطبيق عبر رابط المشاركة.

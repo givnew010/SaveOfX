@@ -66,4 +66,12 @@ export interface FolderWithCount {
   count: number;
 }
 
-export type MainTab = 'BOOKMARKS' | 'FOLDERS';
+export type MainTab = 'BOOKMARKS' | 'FOLDERS' | 'SETTINGS';
+
+export interface BackupPayload {
+  app: string;
+  version: number;
+  exportedAt: string;
+  folders: FolderEntity[];
+  bookmarks: TweetBookmarkEntity[];
+}

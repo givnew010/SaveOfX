@@ -90,13 +90,13 @@ export function CreateFolderDialog({
         id="create-folder-title"
         className="text-lg font-bold text-[#0F1419] dark:text-[#F0F6FC] mb-4"
       >
-        إنشاء مجلد جديد
+        إنشاء مجموعة جديدة
       </h2>
 
       <div className="space-y-3.5">
         <div>
           <label className="block text-xs font-semibold text-[#536471] dark:text-[#8B949E] mb-1">
-            اسم المجلد *
+            اسم المجموعة *
           </label>
           <input
             type="text"
@@ -110,7 +110,7 @@ export function CreateFolderDialog({
 
         <div>
           <p className="text-xs font-semibold text-[#536471] dark:text-[#8B949E] mb-1.5">
-            اختر أيقونة المجلد:
+            اختر أيقونة المجموعة:
           </p>
           <div className="flex flex-wrap gap-1.5">
             {PRESET_EMOJIS.map((emoji) => {
@@ -167,7 +167,7 @@ export function CreateFolderDialog({
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="وصف مختصر لمحتوى المجلد"
+            placeholder="وصف مختصر لمحتوى المجموعة"
             rows={2}
             className="w-full p-3 rounded-xl border border-[#CFD9DE] dark:border-[#30363D] bg-transparent text-sm text-[#0F1419] dark:text-[#F0F6FC] focus:outline-none focus:border-[#1D9BF0] resize-none"
           />
@@ -192,7 +192,7 @@ export function CreateFolderDialog({
           }}
           className="min-h-[42px] px-5 py-2 rounded-xl bg-[#1D9BF0] hover:bg-[#1A8CD8] disabled:opacity-50 text-white text-sm font-bold transition-colors"
         >
-          إنشاء المجلد
+          إنشاء المجموعة
         </button>
       </div>
     </ModalBackdrop>
@@ -224,13 +224,13 @@ export function EditFolderDialog({
         id="edit-folder-title"
         className="text-lg font-bold text-[#0F1419] dark:text-[#F0F6FC] mb-4"
       >
-        تعديل المجلد
+        تعديل المجموعة
       </h2>
 
       <div className="space-y-3.5">
         <div>
           <label className="block text-xs font-semibold text-[#536471] dark:text-[#8B949E] mb-1">
-            اسم المجلد
+            اسم المجموعة
           </label>
           <input
             type="text"
@@ -352,12 +352,12 @@ export function DeleteFolderDialog({
           id="delete-folder-title"
           className="text-lg font-bold text-[#0F1419] dark:text-[#F0F6FC]"
         >
-          حذف مجلد &quot;{folderItem.folder.name}&quot;؟
+          حذف مجموعة &quot;{folderItem.folder.name}&quot;؟
         </h2>
       </div>
 
       <p className="text-sm text-[#536471] dark:text-[#8B949E] text-center mb-4">
-        يحتوي هذا المجلد على {folderItem.count} علامة مرجعية محفوظة.
+        تحتوي هذه المجموعة على {folderItem.count} علامة مرجعية محفوظة.
       </p>
 
       {folderItem.count > 0 && (
@@ -369,7 +369,7 @@ export function DeleteFolderDialog({
             className="w-4 h-4 accent-[#1D9BF0]"
           />
           <span className="text-xs sm:text-sm text-[#0F1419] dark:text-[#F0F6FC]">
-            نقل العلامات إلى المجلد الافتراضي بدلاً من حذفها
+            نقل العلامات إلى المجموعة الافتراضية بدلاً من حذفها
           </span>
         </label>
       )}
@@ -387,7 +387,7 @@ export function DeleteFolderDialog({
           onClick={() => onConfirm(moveToGeneral)}
           className="min-h-[42px] px-5 py-2 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-sm font-bold transition-colors"
         >
-          حذف المجلد
+          حذف المجموعة
         </button>
       </div>
     </ModalBackdrop>
@@ -415,7 +415,7 @@ export function MoveBookmarkDialog({
           id="move-bookmark-title"
           className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]"
         >
-          نقل التغريدة إلى مجلد آخر
+          نقل التغريدة إلى مجموعة أخرى
         </h2>
       </div>
 

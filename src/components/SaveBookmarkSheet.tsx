@@ -98,7 +98,7 @@ export function SaveBookmarkSheet({
                 id="save-sheet-title"
                 className="text-lg font-bold text-[#0F1419] dark:text-[#F0F6FC]"
               >
-                حفظ التغريدة في مجلد
+                حفظ التغريدة في مجموعة
               </h2>
             </div>
 
@@ -203,7 +203,7 @@ export function SaveBookmarkSheet({
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-bold text-[#0F1419] dark:text-[#F0F6FC]">
-                اختر مجلد الحفظ:
+                اختر مجموعة الحفظ:
               </span>
               <button
                 type="button"
@@ -211,7 +211,7 @@ export function SaveBookmarkSheet({
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold text-[#1D9BF0] hover:bg-[#1D9BF0]/10 transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                <span>مجلد جديد</span>
+                <span>مجموعة جديدة</span>
               </button>
             </div>
 
@@ -287,7 +287,7 @@ export function SaveBookmarkSheet({
             className="mt-5 w-full h-12 rounded-xl bg-[#1D9BF0] hover:bg-[#1A8CD8] disabled:opacity-50 text-white font-bold text-base flex items-center justify-center gap-2 transition-colors"
           >
             <BookmarkPlus className="w-5 h-5" />
-            <span>حفظ في المجلد الآن</span>
+            <span>حفظ في المجموعة الآن</span>
           </button>
         </div>
       </div>

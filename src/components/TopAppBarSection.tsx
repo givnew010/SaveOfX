@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bookmark, Folder, Moon, Search, Sun, X } from 'lucide-react';
+import { Bookmark, Folder, Moon, Search, Settings, Sun, X } from 'lucide-react';
 import type { MainTab } from '../types/bookmark';
 
 interface TopAppBarSectionProps {
@@ -45,7 +45,7 @@ export function TopAppBarSection({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-bold text-[#0F1419] dark:text-[#F0F6FC] whitespace-nowrap truncate">
-                  مجلدات X
+                  مجموعات X
                 </h1>
                 <span className="rounded px-1.5 py-0.5 text-[11px] font-bold bg-[#1D9BF0]/15 text-[#1D9BF0] whitespace-nowrap shrink-0">
                   Premium
@@ -109,20 +109,20 @@ export function TopAppBarSection({
           </div>
         )}
 
-        {/* Tab Row (Bookmarks Feed vs Folders Manager) */}
-        <div className="grid grid-cols-2" role="tablist" aria-label="الأقسام الرئيسية">
+        {/* Tab Row (Bookmarks Feed vs Collections vs Settings) */}
+        <div className="grid grid-cols-3" role="tablist" aria-label="الأقسام الرئيسية">
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === 'BOOKMARKS'}
             onClick={() => onTabSelected('BOOKMARKS')}
-            className={`relative min-h-[46px] flex items-center justify-center gap-2 text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
+            className={`relative min-h-[46px] px-2 flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
               activeTab === 'BOOKMARKS'
                 ? 'text-[#1D9BF0] font-bold'
                 : 'text-[#536471] dark:text-[#8B949E] font-medium hover:text-[#0F1419] dark:hover:text-[#F0F6FC]'
             }`}
           >
-            <Bookmark className="w-[18px] h-[18px]" />
+            <Bookmark className="w-[17px] h-[17px] shrink-0" />
             <span>العلامات المرجعية</span>
             {activeTab === 'BOOKMARKS' && (
               <span className="absolute bottom-0 inset-x-0 h-[3px] bg-[#1D9BF0]" />
@@ -134,15 +134,33 @@ export function TopAppBarSection({
             role="tab"
             aria-selected={activeTab === 'FOLDERS'}
             onClick={() => onTabSelected('FOLDERS')}
-            className={`relative min-h-[46px] flex items-center justify-center gap-2 text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
+            className={`relative min-h-[46px] px-2 flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
               activeTab === 'FOLDERS'
                 ? 'text-[#1D9BF0] font-bold'
                 : 'text-[#536471] dark:text-[#8B949E] font-medium hover:text-[#0F1419] dark:hover:text-[#F0F6FC]'
             }`}
           >
-            <Folder className="w-[18px] h-[18px]" />
-            <span>إدارة المجلدات</span>
+            <Folder className="w-[17px] h-[17px] shrink-0" />
+            <span>المجموعات</span>
             {activeTab === 'FOLDERS' && (
+              <span className="absolute bottom-0 inset-x-0 h-[3px] bg-[#1D9BF0]" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'SETTINGS'}
+            onClick={() => onTabSelected('SETTINGS')}
+            className={`relative min-h-[46px] px-2 flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
+              activeTab === 'SETTINGS'
+                ? 'text-[#1D9BF0] font-bold'
+                : 'text-[#536471] dark:text-[#8B949E] font-medium hover:text-[#0F1419] dark:hover:text-[#F0F6FC]'
+            }`}
+          >
+            <Settings className="w-[17px] h-[17px] shrink-0" />
+            <span>الإعدادات</span>
+            {activeTab === 'SETTINGS' && (
               <span className="absolute bottom-0 inset-x-0 h-[3px] bg-[#1D9BF0]" />
             )}
           </button>
