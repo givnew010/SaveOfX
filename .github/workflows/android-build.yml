@@ -31,16 +31,15 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Install Android SDK Components
         run: |
           sdkmanager --install \
             "platforms;android-36.1" \
             "build-tools;36.0.0"
-
-      - name: Accept Android Licenses
-        run: yes | sdkmanager --licenses || true
 
       - name: Generate Debug Keystore
         run: |
