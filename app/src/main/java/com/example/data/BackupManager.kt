@@ -10,8 +10,10 @@ import java.util.TimeZone
 data class RestorePlan(
     val foldersToSave: List<FolderEntity>,
     val bookmarksToSave: List<TweetBookmarkEntity>,
+    val accountsToSave: List<AccountBookmarkEntity>,
     val foldersAddedCount: Int,
     val bookmarksAddedCount: Int,
+    val accountsAddedCount: Int,
     val isReplace: Boolean
 )
 
@@ -32,14 +34,16 @@ object BackupManager {
     fun buildPayload(
         folders: List<FolderEntity>,
         bookmarks: List<TweetBookmarkEntity>,
+        accounts: List<AccountBookmarkEntity> = emptyList(),
         exportedAt: String = nowIsoTimestamp()
     ): BackupPayload {
         return BackupPayload(
             app = "X Folders",
-            version = 1,
+            version = 2,
             exportedAt = exportedAt,
             folders = folders,
-            bookmarks = bookmarks
+            bookmarks = bookmarks,
+            accounts = accounts
         )
     }
 
@@ -57,6 +61,7 @@ object BackupManager {
 
         val rawFolders = raw.folders ?: return null
         val rawBookmarks = raw.bookmarks ?: return null
+        val rawAccounts = raw.accounts.orEmpty()
         val now = System.currentTimeMillis()
 
         val validFolders = mutableListOf<FolderEntity>()
@@ -114,14 +119,44 @@ object BackupManager {
             )
         }
 
-        if (validFolders.isEmpty() && validBookmarks.isEmpty()) return null
+        val validAccounts = mutableListOf<AccountBookmarkEntity>()
+        for (item in rawAccounts) {
+            val profileUrl = item.profileUrl?.trim().orEmpty()
+            val rawHandle = item.handle?.trim().orEmpty()
+            if (profileUrl.isEmpty() || rawHandle.isEmpty()) continue
+            val normalizedHandle = if (rawHandle.startsWith("@")) rawHandle else "@$rawHandle"
+            val candidateId = item.id?.takeIf { it > 0L } ?: (validAccounts.size + 1L)
+            validAccounts.add(
+                AccountBookmarkEntity(
+                    id = candidateId,
+                    folderId = item.folderId?.takeIf { it > 0L } ?: 1L,
+                    profileUrl = profileUrl,
+                    handle = normalizedHandle,
+                    displayName = item.displayName?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: normalizedHandle.removePrefix("@"),
+                    avatarUrl = item.avatarUrl?.takeIf { it.isNotBlank() },
+                    bio = item.bio.orEmpty(),
+                    followersCount = item.followersCount ?: 0L,
+                    followingCount = item.followingCount ?: 0L,
+                    verified = item.verified ?: false,
+                    userNote = item.userNote?.trim()?.takeIf { it.isNotEmpty() },
+                    tags = item.tags.orEmpty(),
+                    isFavorite = item.isFavorite ?: false,
+                    savedAt = item.savedAt ?: now,
+                    isProfileFetched = item.isProfileFetched ?: false
+                )
+            )
+        }
+
+        if (validFolders.isEmpty() && validBookmarks.isEmpty() && validAccounts.isEmpty()) return null
 
         return BackupPayload(
             app = raw.app?.takeIf { it.isNotBlank() } ?: "X Folders",
-            version = raw.version ?: 1,
+            version = raw.version ?: 2,
             exportedAt = raw.exportedAt?.takeIf { it.isNotBlank() } ?: nowIsoTimestamp(),
             folders = validFolders,
-            bookmarks = validBookmarks
+            bookmarks = validBookmarks,
+            accounts = validAccounts
         )
     }
 
@@ -129,14 +164,15 @@ object BackupManager {
         payload: BackupPayload,
         mode: RestoreMode,
         existingFolders: List<FolderEntity>,
-        existingBookmarks: List<TweetBookmarkEntity>
+        existingBookmarks: List<TweetBookmarkEntity>,
+        existingAccounts: List<AccountBookmarkEntity> = emptyList()
     ): RestorePlan {
         if (mode == RestoreMode.REPLACE) {
             var maxFolderId = payload.folders.maxOfOrNull { it.id } ?: 0L
             val seenFolderIds = mutableSetOf<Long>()
             val folderIdMap = mutableMapOf<Long, Long>()
 
-            var normalizedFolders = payload.folders.mapIndexed { index, folder ->
+            val normalizedFolders = payload.folders.mapIndexed { index, folder ->
                 val baseId = if (folder.id > 0L) folder.id else (index + 1L)
                 val finalId = if (seenFolderIds.add(baseId)) {
                     baseId
@@ -154,7 +190,7 @@ object BackupManager {
                         name = "العلامات المرجعية العامة",
                         iconEmoji = "📌",
                         colorHex = "#1D9BF0",
-                        description = "المجموعة الافتراضية لجميع التغريدات غير المصنفة",
+                        description = "المجموعة الافتراضية لجميع العناصر غير المصنفة",
                         createdAt = System.currentTimeMillis(),
                         isDefault = true
                     )
@@ -178,11 +214,22 @@ object BackupManager {
                 )
             }
 
+            val normalizedAccounts = payload.accounts.mapIndexed { index, account ->
+                val mappedFolderId = folderIdMap[account.folderId] ?: account.folderId
+                val finalFolderId = if (mappedFolderId in validFolderIds) mappedFolderId else defaultFolderId
+                account.copy(
+                    id = index + 1L,
+                    folderId = finalFolderId
+                )
+            }
+
             return RestorePlan(
                 foldersToSave = normalizedFolders,
                 bookmarksToSave = normalizedBookmarks,
+                accountsToSave = normalizedAccounts,
                 foldersAddedCount = normalizedFolders.size,
                 bookmarksAddedCount = normalizedBookmarks.size,
+                accountsAddedCount = normalizedAccounts.size,
                 isReplace = true
             )
         }
@@ -233,11 +280,32 @@ object BackupManager {
             )
         }
 
+        val existingAccountUrlSet = existingAccounts
+            .map { it.profileUrl.trim().lowercase(Locale.US) }
+            .toMutableSet()
+        var nextAccountId = (existingAccounts.maxOfOrNull { it.id } ?: 0L) + 1L
+        val newAccountsToInsert = mutableListOf<AccountBookmarkEntity>()
+
+        for (incoming in payload.accounts) {
+            val normalizedProfileUrl = incoming.profileUrl.trim().lowercase(Locale.US)
+            if (normalizedProfileUrl in existingAccountUrlSet) continue
+            existingAccountUrlSet.add(normalizedProfileUrl)
+            val targetFolderId = folderIdMap[incoming.folderId] ?: defaultFolderId
+            newAccountsToInsert.add(
+                incoming.copy(
+                    id = nextAccountId++,
+                    folderId = targetFolderId
+                )
+            )
+        }
+
         return RestorePlan(
             foldersToSave = newFoldersToInsert,
             bookmarksToSave = newBookmarksToInsert,
+            accountsToSave = newAccountsToInsert,
             foldersAddedCount = newFoldersToInsert.size,
             bookmarksAddedCount = newBookmarksToInsert.size,
+            accountsAddedCount = newAccountsToInsert.size,
             isReplace = false
         )
     }

@@ -117,7 +117,7 @@ fun FolderCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "${item.count} علامة مرجعية",
+                                text = "${item.count} علامة مرجعية · ${item.accountsCount} حساب",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

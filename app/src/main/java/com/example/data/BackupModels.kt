@@ -40,21 +40,42 @@ data class BackupBookmarkRecord(
 )
 
 @JsonClass(generateAdapter = true)
+data class BackupAccountRecord(
+    val id: Long? = null,
+    val folderId: Long? = null,
+    val profileUrl: String? = null,
+    val handle: String? = null,
+    val displayName: String? = null,
+    val avatarUrl: String? = null,
+    val bio: String? = null,
+    val followersCount: Long? = null,
+    val followingCount: Long? = null,
+    val verified: Boolean? = null,
+    val userNote: String? = null,
+    val tags: String? = null,
+    val isFavorite: Boolean? = null,
+    val savedAt: Long? = null,
+    val isProfileFetched: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class RawBackupEnvelope(
     val app: String? = null,
     val version: Int? = null,
     val exportedAt: String? = null,
     val folders: List<BackupFolderRecord>? = null,
-    val bookmarks: List<BackupBookmarkRecord>? = null
+    val bookmarks: List<BackupBookmarkRecord>? = null,
+    val accounts: List<BackupAccountRecord>? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class BackupPayload(
     val app: String = "X Folders",
-    val version: Int = 1,
+    val version: Int = 2,
     val exportedAt: String,
     val folders: List<FolderEntity>,
-    val bookmarks: List<TweetBookmarkEntity>
+    val bookmarks: List<TweetBookmarkEntity>,
+    val accounts: List<AccountBookmarkEntity> = emptyList()
 )
 
 enum class RestoreMode {
@@ -64,7 +85,8 @@ enum class RestoreMode {
 
 data class RestoreSummary(
     val foldersAdded: Int,
-    val bookmarksAdded: Int
+    val bookmarksAdded: Int,
+    val accountsAdded: Int = 0
 )
 
 enum class ThemeMode(val key: String) {

@@ -1,4 +1,4 @@
-import { Bookmark, Pencil, Trash2 } from 'lucide-react';
+import { Bookmark, Pencil, Trash2, Users } from 'lucide-react';
 import type { FolderWithCount } from '../types/bookmark';
 
 interface FolderCardProps {
@@ -9,7 +9,7 @@ interface FolderCardProps {
 }
 
 export function FolderCard({ item, onClick, onEdit, onDelete }: FolderCardProps) {
-  const { folder, count } = item;
+  const { folder, count, accountCount } = item;
   const folderColor = folder.colorHex || '#1D9BF0';
 
   return (
@@ -52,9 +52,16 @@ export function FolderCard({ item, onClick, onEdit, onDelete }: FolderCardProps)
               )}
             </div>
 
-            <div className="flex items-center gap-1 mt-0.5 text-xs text-[#536471] dark:text-[#8B949E] tabular-nums">
-              <Bookmark className="w-3.5 h-3.5 shrink-0" style={{ color: folderColor }} />
-              <span>{count} علامة مرجعية</span>
+            <div className="flex flex-wrap items-center gap-2.5 mt-0.5 text-xs text-[#536471] dark:text-[#8B949E] tabular-nums">
+              <span className="inline-flex items-center gap-1">
+                <Bookmark className="w-3.5 h-3.5 shrink-0" style={{ color: folderColor }} />
+                <span>{count} علامة مرجعية</span>
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1">
+                <Users className="w-3.5 h-3.5 shrink-0" style={{ color: folderColor }} />
+                <span>{accountCount} حساب</span>
+              </span>
             </div>
           </div>
         </div>

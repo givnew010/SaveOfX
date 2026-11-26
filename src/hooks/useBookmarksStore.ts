@@ -1,26 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookmarkRepository } from '../data/bookmarkRepository';
 import type {
+  AccountBookmarkEntity,
   BackupPayload,
   FolderEntity,
   FolderWithCount,
   MainTab,
+  ParsedAccount,
   ParsedTweet,
   TweetBookmarkEntity,
 } from '../types/bookmark';
+import { AccountFetcher } from '../utils/accountFetcher';
+import { AccountParser } from '../utils/accountParser';
 import { TweetFetcher } from '../utils/tweetFetcher';
 import { TweetParser } from '../utils/tweetParser';
 
 export function useBookmarksStore() {
   const [folders, setFolders] = useState<FolderEntity[]>([]);
   const [bookmarks, setBookmarks] = useState<TweetBookmarkEntity[]>([]);
+  const [accounts, setAccounts] = useState<AccountBookmarkEntity[]>([]);
 
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  const [selectedAccountFolderId, setSelectedAccountFolderId] = useState<number | null>(null);
+  const [showAccountFavoritesOnly, setShowAccountFavoritesOnly] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<MainTab>('BOOKMARKS');
 
-  // Save Sheet state
+  // Save Bookmark Sheet state
   const [isSaveSheetOpen, setIsSaveSheetOpen] = useState(false);
   const [pendingUrlInput, setPendingUrlInput] = useState('');
   const [pendingParsedTweet, setPendingParsedTweet] = useState<ParsedTweet | null>(null);
@@ -30,14 +39,26 @@ export function useBookmarksStore() {
   const [pendingUserNote, setPendingUserNote] = useState('');
   const [pendingTags, setPendingTags] = useState('');
 
+  // Save Account Sheet state
+  const [isAccountSheetOpen, setIsAccountSheetOpen] = useState(false);
+  const [pendingAccountInput, setPendingAccountInput] = useState('');
+  const [pendingParsedAccount, setPendingParsedAccount] = useState<ParsedAccount | null>(null);
+  const [isFetchingAccount, setIsFetchingAccount] = useState(false);
+  const [isOfflineAccountPreview, setIsOfflineAccountPreview] = useState(false);
+  const [pendingAccountFolderId, setPendingAccountFolderId] = useState<number | null>(null);
+  const [pendingAccountNote, setPendingAccountNote] = useState('');
+  const [pendingAccountTags, setPendingAccountTags] = useState('');
+
   // Refreshing cards
   const [refreshingBookmarkIds, setRefreshingBookmarkIds] = useState<Set<number>>(new Set());
+  const [refreshingAccountIds, setRefreshingAccountIds] = useState<Set<number>>(new Set());
 
   // Dialogs
   const [showCreateFolderDialog, setShowCreateFolderDialog] = useState(false);
   const [folderToEdit, setFolderToEdit] = useState<FolderEntity | null>(null);
   const [folderToDelete, setFolderToDelete] = useState<FolderWithCount | null>(null);
   const [bookmarkToMove, setBookmarkToMove] = useState<TweetBookmarkEntity | null>(null);
+  const [accountToMove, setAccountToMove] = useState<AccountBookmarkEntity | null>(null);
   const [userFeedbackMessage, setUserFeedbackMessage] = useState<string | null>(null);
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(() =>
     BookmarkRepository.getLastBackupAt()
@@ -45,10 +66,13 @@ export function useBookmarksStore() {
 
   const previewFetchTimerRef = useRef<number | null>(null);
   const previewRequestSeqRef = useRef(0);
+  const accountFetchTimerRef = useRef<number | null>(null);
+  const accountRequestSeqRef = useRef(0);
 
   const reloadFromRepo = useCallback(() => {
     setFolders(BookmarkRepository.getAllFolders());
     setBookmarks(BookmarkRepository.getAllBookmarks());
+    setAccounts(BookmarkRepository.getAllAccounts());
   }, []);
 
   const showFeedback = useCallback((message: string) => {
@@ -91,6 +115,44 @@ export function useBookmarksStore() {
       setRefreshingBookmarkIds((prev) => {
         const next = new Set(prev);
         next.delete(bookmark.id);
+        return next;
+      });
+    },
+    [reloadFromRepo, showFeedback]
+  );
+
+  const refreshSingleAccount = useCallback(
+    async (account: AccountBookmarkEntity, silent = false) => {
+      if (!AccountParser.isValidAccountInput(account.profileUrl || account.handle)) {
+        if (!silent) showFeedback('رابط الحساب لا يشير إلى حساب X صالح');
+        return;
+      }
+
+      if (!AccountFetcher.isNetworkAvailable()) {
+        if (!silent) showFeedback('لا يوجد اتصال بالإنترنت — يعرض معرف الحساب فقط');
+        return;
+      }
+
+      setRefreshingAccountIds((prev) => {
+        const next = new Set(prev);
+        next.add(account.id);
+        return next;
+      });
+
+      const result = await AccountFetcher.fetchAccount(account.profileUrl || account.handle);
+      if (result.status === 'success') {
+        BookmarkRepository.updateAccountWithFetchedProfile(account, result.account);
+        reloadFromRepo();
+        if (!silent) showFeedback('تم تحديث بيانات الحساب بنجاح');
+      } else if (result.status === 'offline') {
+        if (!silent) showFeedback('لا يوجد اتصال بالإنترنت');
+      } else {
+        if (!silent) showFeedback('تعذر جلب بيانات الحساب حالياً');
+      }
+
+      setRefreshingAccountIds((prev) => {
+        const next = new Set(prev);
+        next.delete(account.id);
         return next;
       });
     },
@@ -167,8 +229,67 @@ export function useBookmarksStore() {
     }
   }, []);
 
+  const fetchAccountPreviewForInput = useCallback((rawInput: string, immediate: boolean) => {
+    if (accountFetchTimerRef.current !== null) {
+      window.clearTimeout(accountFetchTimerRef.current);
+      accountFetchTimerRef.current = null;
+    }
+
+    const requestSeq = ++accountRequestSeqRef.current;
+
+    const run = async () => {
+      setIsFetchingAccount(true);
+      setIsOfflineAccountPreview(false);
+
+      const result = await AccountFetcher.fetchAccount(rawInput);
+      if (accountRequestSeqRef.current !== requestSeq) return;
+
+      if (result.status === 'success') {
+        setPendingParsedAccount(result.account);
+        setIsOfflineAccountPreview(false);
+      } else if (result.status === 'offline') {
+        setPendingParsedAccount(result.fallbackAccount);
+        setIsOfflineAccountPreview(true);
+      } else {
+        setPendingParsedAccount(result.fallbackAccount);
+        setIsOfflineAccountPreview(!AccountFetcher.isNetworkAvailable());
+      }
+      setIsFetchingAccount(false);
+    };
+
+    if (immediate) {
+      void run();
+    } else {
+      accountFetchTimerRef.current = window.setTimeout(() => {
+        void run();
+      }, 400);
+    }
+  }, []);
+
+  const openManualAccountSheet = useCallback(
+    (initialInput = '') => {
+      setPendingAccountInput(initialInput);
+      setPendingParsedAccount(
+        initialInput.trim() ? AccountParser.parseAccountInput(initialInput) : null
+      );
+      setIsFetchingAccount(false);
+      setIsOfflineAccountPreview(false);
+      setPendingAccountNote('');
+      setPendingAccountTags('');
+      setIsAccountSheetOpen(true);
+      if (initialInput.trim() && AccountParser.isValidAccountInput(initialInput)) {
+        fetchAccountPreviewForInput(initialInput, true);
+      }
+    },
+    [fetchAccountPreviewForInput]
+  );
+
   const onReceiveSharedText = useCallback(
     (rawText: string) => {
+      if (!TweetParser.isTweetUrl(rawText) && AccountParser.isProfileUrl(rawText)) {
+        openManualAccountSheet(rawText);
+        return;
+      }
       const parsed = TweetParser.parseSharedText(rawText);
       setPendingUrlInput(parsed.tweetUrl);
       setPendingParsedTweet(parsed);
@@ -177,7 +298,7 @@ export function useBookmarksStore() {
       setIsSaveSheetOpen(true);
       fetchPreviewForInput(rawText, true);
     },
-    [fetchPreviewForInput]
+    [fetchPreviewForInput, openManualAccountSheet]
   );
 
   // Initial seed + pending refresh + check incoming shared URL query param
@@ -185,6 +306,7 @@ export function useBookmarksStore() {
     const seeded = BookmarkRepository.seedInitialDataIfEmpty();
     setFolders(seeded.folders);
     setBookmarks(seeded.bookmarks);
+    setAccounts(seeded.accounts);
     void refreshPendingBookmarks();
 
     const params = new URLSearchParams(window.location.search);
@@ -196,8 +318,8 @@ export function useBookmarksStore() {
   }, []);
 
   const foldersWithCount = useMemo(
-    () => BookmarkRepository.getFoldersWithCount(folders, bookmarks),
-    [folders, bookmarks]
+    () => BookmarkRepository.getFoldersWithCount(folders, bookmarks, accounts),
+    [folders, bookmarks, accounts]
   );
 
   const filteredBookmarks = useMemo(() => {
@@ -216,8 +338,27 @@ export function useBookmarksStore() {
     });
   }, [bookmarks, selectedFolderId, showFavoritesOnly, searchQuery]);
 
+  const filteredAccounts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return accounts.filter((a) => {
+      const matchFolder = selectedAccountFolderId === null || a.folderId === selectedAccountFolderId;
+      const matchFav = !showAccountFavoritesOnly || a.isFavorite;
+      const matchQuery =
+        query.length === 0 ||
+        a.displayName.toLowerCase().includes(query) ||
+        a.handle.toLowerCase().includes(query) ||
+        a.bio.toLowerCase().includes(query) ||
+        (a.userNote?.toLowerCase().includes(query) ?? false) ||
+        a.tags.toLowerCase().includes(query);
+      return matchFolder && matchFav && matchQuery;
+    });
+  }, [accounts, selectedAccountFolderId, showAccountFavoritesOnly, searchQuery]);
+
   const effectivePendingFolderId =
     pendingSelectedFolderId ?? foldersWithCount[0]?.folder.id ?? null;
+
+  const effectivePendingAccountFolderId =
+    pendingAccountFolderId ?? foldersWithCount[0]?.folder.id ?? null;
 
   const selectFolder = useCallback((folderId: number | null) => {
     setSelectedFolderId(folderId);
@@ -233,6 +374,25 @@ export function useBookmarksStore() {
       if (next) {
         setSelectedFolderId(null);
         setActiveTab('BOOKMARKS');
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAccountFolder = useCallback((folderId: number | null) => {
+    setSelectedAccountFolderId(folderId);
+    if (folderId !== null) {
+      setShowAccountFavoritesOnly(false);
+      setActiveTab('ACCOUNTS');
+    }
+  }, []);
+
+  const toggleAccountFavoritesOnly = useCallback(() => {
+    setShowAccountFavoritesOnly((prev) => {
+      const next = !prev;
+      if (next) {
+        setSelectedAccountFolderId(null);
+        setActiveTab('ACCOUNTS');
       }
       return next;
     });
@@ -271,6 +431,21 @@ export function useBookmarksStore() {
     setPendingTags('');
   }, []);
 
+  const closeAccountSheet = useCallback(() => {
+    if (accountFetchTimerRef.current !== null) {
+      window.clearTimeout(accountFetchTimerRef.current);
+      accountFetchTimerRef.current = null;
+    }
+    accountRequestSeqRef.current += 1;
+    setIsAccountSheetOpen(false);
+    setPendingParsedAccount(null);
+    setIsFetchingAccount(false);
+    setIsOfflineAccountPreview(false);
+    setPendingAccountInput('');
+    setPendingAccountNote('');
+    setPendingAccountTags('');
+  }, []);
+
   const onUrlInputChanged = useCallback(
     (newUrl: string) => {
       setPendingUrlInput(newUrl);
@@ -302,6 +477,39 @@ export function useBookmarksStore() {
       }
     },
     [fetchPreviewForInput]
+  );
+
+  const onAccountInputChanged = useCallback(
+    (newInput: string) => {
+      setPendingAccountInput(newInput);
+      if (!newInput.trim()) {
+        if (accountFetchTimerRef.current !== null) {
+          window.clearTimeout(accountFetchTimerRef.current);
+          accountFetchTimerRef.current = null;
+        }
+        accountRequestSeqRef.current += 1;
+        setPendingParsedAccount(null);
+        setIsFetchingAccount(false);
+        setIsOfflineAccountPreview(false);
+        return;
+      }
+
+      const baseline = AccountParser.parseAccountInput(newInput);
+      setPendingParsedAccount(baseline);
+
+      if (baseline) {
+        fetchAccountPreviewForInput(newInput, false);
+      } else {
+        if (accountFetchTimerRef.current !== null) {
+          window.clearTimeout(accountFetchTimerRef.current);
+          accountFetchTimerRef.current = null;
+        }
+        accountRequestSeqRef.current += 1;
+        setIsFetchingAccount(false);
+        setIsOfflineAccountPreview(false);
+      }
+    },
+    [fetchAccountPreviewForInput]
   );
 
   const savePendingBookmark = useCallback(() => {
@@ -358,6 +566,56 @@ export function useBookmarksStore() {
     refreshSingleBookmark,
   ]);
 
+  const savePendingAccount = useCallback(() => {
+    const rawInput = pendingAccountInput.trim();
+    if (!rawInput) return;
+
+    const parsed = pendingParsedAccount ?? AccountParser.parseAccountInput(rawInput);
+    if (!parsed) {
+      showFeedback('يرجى إدخال معرف حساب X أو رابطه بشكل صحيح');
+      return;
+    }
+
+    const folderId = effectivePendingAccountFolderId ?? 1;
+    const saved = BookmarkRepository.insertAccount({
+      folderId,
+      profileUrl: parsed.profileUrl,
+      handle: parsed.handle,
+      displayName: parsed.displayName,
+      avatarUrl: parsed.avatarUrl,
+      bio: parsed.bio,
+      followersCount: parsed.followersCount,
+      followingCount: parsed.followingCount,
+      verified: parsed.verified,
+      userNote: pendingAccountNote.trim() || undefined,
+      tags: pendingAccountTags.trim(),
+      isFavorite: false,
+      isProfileFetched: parsed.isProfileFetched,
+    });
+
+    reloadFromRepo();
+    closeAccountSheet();
+    showFeedback(
+      saved.isProfileFetched
+        ? 'تم حفظ الحساب وبياناته في المجموعة بنجاح'
+        : 'تم حفظ الحساب في المجموعة بنجاح'
+    );
+
+    if (!saved.isProfileFetched) {
+      void refreshSingleAccount(saved, true);
+    }
+  }, [
+    pendingAccountInput,
+    pendingParsedAccount,
+    effectivePendingAccountFolderId,
+    pendingAccountNote,
+    pendingAccountTags,
+    reloadFromRepo,
+    closeAccountSheet,
+    showFeedback,
+    refreshSingleAccount,
+  ]);
+
   const toggleFavorite = useCallback(
     (bookmark: TweetBookmarkEntity) => {
       BookmarkRepository.toggleFavorite(bookmark.id);
@@ -386,6 +644,34 @@ export function useBookmarksStore() {
     [reloadFromRepo, showFeedback]
   );
 
+  const toggleAccountFavorite = useCallback(
+    (account: AccountBookmarkEntity) => {
+      BookmarkRepository.toggleAccountFavorite(account.id);
+      reloadFromRepo();
+    },
+    [reloadFromRepo]
+  );
+
+  const moveAccountToFolder = useCallback(
+    (newFolderId: number) => {
+      if (!accountToMove) return;
+      BookmarkRepository.moveAccount(accountToMove.id, newFolderId);
+      reloadFromRepo();
+      setAccountToMove(null);
+      showFeedback('تم نقل الحساب إلى المجموعة الجديدة');
+    },
+    [accountToMove, reloadFromRepo, showFeedback]
+  );
+
+  const deleteAccount = useCallback(
+    (accountId: number) => {
+      BookmarkRepository.deleteAccount(accountId);
+      reloadFromRepo();
+      showFeedback('تم حذف الحساب المحفوظ');
+    },
+    [reloadFromRepo, showFeedback]
+  );
+
   const createFolder = useCallback(
     (name: string, emoji: string, colorHex: string, description: string) => {
       if (!name.trim()) return;
@@ -399,6 +685,7 @@ export function useBookmarksStore() {
       reloadFromRepo();
       setShowCreateFolderDialog(false);
       setPendingSelectedFolderId(created.id);
+      setPendingAccountFolderId(created.id);
       showFeedback('تم إنشاء المجموعة بنجاح');
     },
     [reloadFromRepo, showFeedback]
@@ -434,11 +721,14 @@ export function useBookmarksStore() {
       if (selectedFolderId === folderToDelete.folder.id) {
         setSelectedFolderId(null);
       }
+      if (selectedAccountFolderId === folderToDelete.folder.id) {
+        setSelectedAccountFolderId(null);
+      }
       reloadFromRepo();
       setFolderToDelete(null);
       showFeedback('تم حذف المجموعة بنجاح');
     },
-    [folderToDelete, selectedFolderId, reloadFromRepo, showFeedback]
+    [folderToDelete, selectedFolderId, selectedAccountFolderId, reloadFromRepo, showFeedback]
   );
 
   const exportBackupData = useCallback((): BackupPayload => {
@@ -454,13 +744,15 @@ export function useBookmarksStore() {
       reloadFromRepo();
       setSelectedFolderId(null);
       setShowFavoritesOnly(false);
+      setSelectedAccountFolderId(null);
+      setShowAccountFavoritesOnly(false);
       if (mode === 'replace') {
         showFeedback(
-          `تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية بنجاح`
+          `تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب بنجاح`
         );
       } else {
         showFeedback(
-          `تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية جديدة`
+          `تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب`
         );
       }
       return result;
@@ -471,9 +763,13 @@ export function useBookmarksStore() {
   return {
     folders: foldersWithCount,
     bookmarks: filteredBookmarks,
+    accounts: filteredAccounts,
     totalBookmarksCount: bookmarks.length,
+    totalAccountsCount: accounts.length,
     selectedFolderId,
     showFavoritesOnly,
+    selectedAccountFolderId,
+    showAccountFavoritesOnly,
     searchQuery,
     activeTab,
     isSaveSheetOpen,
@@ -484,16 +780,28 @@ export function useBookmarksStore() {
     pendingSelectedFolderId: effectivePendingFolderId,
     pendingUserNote,
     pendingTags,
+    isAccountSheetOpen,
+    pendingAccountInput,
+    pendingParsedAccount,
+    isFetchingAccount,
+    isOfflineAccountPreview,
+    pendingAccountFolderId: effectivePendingAccountFolderId,
+    pendingAccountNote,
+    pendingAccountTags,
     refreshingBookmarkIds,
+    refreshingAccountIds,
     showCreateFolderDialog,
     folderToEdit,
     folderToDelete,
     bookmarkToMove,
+    accountToMove,
     userFeedbackMessage,
     lastBackupAt,
     setActiveTab,
     selectFolder,
     toggleFavoritesOnly,
+    selectAccountFolder,
+    toggleAccountFavoritesOnly,
     setSearchQuery,
     onReceiveSharedText,
     openManualAddSheet,
@@ -503,7 +811,15 @@ export function useBookmarksStore() {
     setPendingUserNote,
     setPendingTags,
     savePendingBookmark,
+    openManualAccountSheet,
+    closeAccountSheet,
+    onAccountInputChanged,
+    setPendingAccountFolderId,
+    setPendingAccountNote,
+    setPendingAccountTags,
+    savePendingAccount,
     refreshSingleBookmark,
+    refreshSingleAccount,
     showFeedback,
     clearFeedbackMessage,
     toggleFavorite,
@@ -511,6 +827,11 @@ export function useBookmarksStore() {
     closeMoveBookmarkDialog: () => setBookmarkToMove(null),
     moveBookmarkToFolder,
     deleteBookmark,
+    toggleAccountFavorite,
+    openMoveAccountDialog: setAccountToMove,
+    closeMoveAccountDialog: () => setAccountToMove(null),
+    moveAccountToFolder,
+    deleteAccount,
     openCreateFolderDialog: () => setShowCreateFolderDialog(true),
     closeCreateFolderDialog: () => setShowCreateFolderDialog(false),
     createFolder,

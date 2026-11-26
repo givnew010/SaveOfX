@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FolderSpecial
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -49,12 +51,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.ThemeMode
+import com.example.ui.components.AccountCard
 import com.example.ui.components.CreateFolderDialog
 import com.example.ui.components.DeleteFolderDialog
 import com.example.ui.components.EditFolderDialog
 import com.example.ui.components.FolderCard
 import com.example.ui.components.FolderFilterBar
+import com.example.ui.components.MoveAccountDialog
 import com.example.ui.components.MoveBookmarkDialog
+import com.example.ui.components.SaveAccountBottomSheet
 import com.example.ui.components.SaveBookmarkBottomSheet
 import com.example.ui.components.SettingsScreen
 import com.example.ui.components.TopAppBarSection
@@ -66,8 +71,12 @@ fun MainScreen(viewModel: BookmarkViewModel) {
     val folders by viewModel.folders.collectAsStateWithLifecycle()
     val bookmarks by viewModel.filteredBookmarks.collectAsStateWithLifecycle()
     val totalBookmarksCount by viewModel.totalBookmarksCount.collectAsStateWithLifecycle()
+    val accounts by viewModel.filteredAccounts.collectAsStateWithLifecycle()
+    val totalAccountsCount by viewModel.totalAccountsCount.collectAsStateWithLifecycle()
     val selectedFolderId by viewModel.selectedFolderId.collectAsStateWithLifecycle()
     val showFavoritesOnly by viewModel.showFavoritesOnly.collectAsStateWithLifecycle()
+    val selectedAccountFolderId by viewModel.selectedAccountFolderId.collectAsStateWithLifecycle()
+    val showAccountFavoritesOnly by viewModel.showAccountFavoritesOnly.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -82,11 +91,22 @@ fun MainScreen(viewModel: BookmarkViewModel) {
     val pendingUserNote by viewModel.pendingUserNote.collectAsStateWithLifecycle()
     val pendingTags by viewModel.pendingTags.collectAsStateWithLifecycle()
 
+    val isSaveAccountSheetOpen by viewModel.isSaveAccountSheetOpen.collectAsStateWithLifecycle()
+    val pendingAccountInput by viewModel.pendingAccountInput.collectAsStateWithLifecycle()
+    val pendingParsedAccount by viewModel.pendingParsedAccount.collectAsStateWithLifecycle()
+    val isFetchingAccount by viewModel.isFetchingAccount.collectAsStateWithLifecycle()
+    val isOfflineAccountPreview by viewModel.isOfflineAccountPreview.collectAsStateWithLifecycle()
+    val pendingAccountFolderId by viewModel.pendingAccountFolderId.collectAsStateWithLifecycle()
+    val pendingAccountNote by viewModel.pendingAccountNote.collectAsStateWithLifecycle()
+    val pendingAccountTags by viewModel.pendingAccountTags.collectAsStateWithLifecycle()
+
     val refreshingIds by viewModel.refreshingBookmarkIds.collectAsStateWithLifecycle()
+    val refreshingAccountIds by viewModel.refreshingAccountIds.collectAsStateWithLifecycle()
     val showCreateFolderDialog by viewModel.showCreateFolderDialog.collectAsStateWithLifecycle()
     val folderToEdit by viewModel.folderToEdit.collectAsStateWithLifecycle()
     val folderToDelete by viewModel.folderToDelete.collectAsStateWithLifecycle()
     val bookmarkToMove by viewModel.bookmarkToMove.collectAsStateWithLifecycle()
+    val accountToMove by viewModel.accountToMove.collectAsStateWithLifecycle()
     val feedbackMessage by viewModel.userFeedbackMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -105,6 +125,7 @@ fun MainScreen(viewModel: BookmarkViewModel) {
         topBar = {
             TopAppBarSection(
                 totalBookmarks = totalBookmarksCount,
+                totalAccounts = totalAccountsCount,
                 searchQuery = searchQuery,
                 onSearchQueryChange = viewModel::setSearchQuery,
                 activeTab = activeTab,
@@ -121,27 +142,41 @@ fun MainScreen(viewModel: BookmarkViewModel) {
             )
         },
         floatingActionButton = {
-            if (activeTab == MainTab.BOOKMARKS) {
-                ExtendedFloatingActionButton(
-                    onClick = { viewModel.openManualAddSheet() },
-                    containerColor = XBlue,
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(16.dp),
-                    icon = { Icon(imageVector = Icons.Filled.Add, contentDescription = null) },
-                    text = { Text("حفظ منشور", fontWeight = FontWeight.Bold) }
-                )
-            } else if (activeTab == MainTab.FOLDERS) {
-                FloatingActionButton(
-                    onClick = { viewModel.openCreateFolderDialog() },
-                    containerColor = XBlue,
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CreateNewFolder,
-                        contentDescription = "إنشاء مجموعة جديدة"
+            when (activeTab) {
+                MainTab.BOOKMARKS -> {
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.openManualAddSheet() },
+                        containerColor = XBlue,
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp),
+                        icon = { Icon(imageVector = Icons.Filled.Add, contentDescription = null) },
+                        text = { Text("حفظ منشور", fontWeight = FontWeight.Bold) }
                     )
                 }
+                MainTab.ACCOUNTS -> {
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.openManualAccountSheet() },
+                        containerColor = XBlue,
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp),
+                        icon = { Icon(imageVector = Icons.Filled.PersonAdd, contentDescription = null) },
+                        text = { Text("حفظ حساب", fontWeight = FontWeight.Bold) }
+                    )
+                }
+                MainTab.FOLDERS -> {
+                    FloatingActionButton(
+                        onClick = { viewModel.openCreateFolderDialog() },
+                        containerColor = XBlue,
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CreateNewFolder,
+                            contentDescription = "إنشاء مجموعة جديدة"
+                        )
+                    }
+                }
+                MainTab.SETTINGS -> Unit
             }
         }
     ) { innerPadding ->
@@ -199,6 +234,57 @@ fun MainScreen(viewModel: BookmarkViewModel) {
                     }
                 }
 
+                MainTab.ACCOUNTS -> {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        FolderFilterBar(
+                            folders = folders,
+                            selectedFolderId = selectedAccountFolderId,
+                            showFavoritesOnly = showAccountFavoritesOnly,
+                            totalBookmarksCount = totalAccountsCount,
+                            onSelectAll = { viewModel.selectAccountFolder(null) },
+                            onToggleFavorites = { viewModel.toggleAccountFavoritesOnly() },
+                            onSelectFolder = { viewModel.selectAccountFolder(it) },
+                            onAddNewFolder = { viewModel.openCreateFolderDialog() },
+                            allLabel = "كل الحسابات",
+                            allIcon = "👤",
+                            getFolderCount = { it.accountsCount }
+                        )
+
+                        if (accounts.isEmpty()) {
+                            EmptyAccountsView(
+                                hasSearch = searchQuery.isNotBlank(),
+                                onClearSearch = { viewModel.setSearchQuery("") },
+                                onAddFirstAccount = { viewModel.openManualAccountSheet() }
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 4.dp,
+                                    bottom = 96.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(items = accounts, key = { it.id }) { account ->
+                                    val folder = folders.firstOrNull { it.folder.id == account.folderId }?.folder
+                                    AccountCard(
+                                        account = account,
+                                        folder = folder,
+                                        isRefreshing = account.id in refreshingAccountIds,
+                                        onRefreshProfile = { viewModel.refreshSingleAccount(account) },
+                                        onToggleFavorite = { viewModel.toggleAccountFavorite(account) },
+                                        onMoveToFolder = { viewModel.openMoveAccountDialog(account) },
+                                        onDelete = { viewModel.deleteAccount(account.id) },
+                                        onFeedback = viewModel::showFeedback
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 MainTab.FOLDERS -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -214,6 +300,7 @@ fun MainScreen(viewModel: BookmarkViewModel) {
                             FoldersManagerHeader(
                                 totalFolders = folders.size,
                                 totalBookmarks = totalBookmarksCount,
+                                totalAccounts = totalAccountsCount,
                                 onCreateFolder = { viewModel.openCreateFolderDialog() }
                             )
                         }
@@ -233,6 +320,7 @@ fun MainScreen(viewModel: BookmarkViewModel) {
                     SettingsScreen(
                         totalFolders = folders.size,
                         totalBookmarks = totalBookmarksCount,
+                        totalAccounts = totalAccountsCount,
                         lastBackupAt = lastBackupAt,
                         themeMode = themeMode,
                         onSetThemeMode = viewModel::setThemeMode,
@@ -262,6 +350,26 @@ fun MainScreen(viewModel: BookmarkViewModel) {
             onOpenCreateFolder = viewModel::openCreateFolderDialog,
             onSave = viewModel::savePendingBookmark,
             onDismiss = viewModel::closeSaveSheet
+        )
+    }
+
+    if (isSaveAccountSheetOpen) {
+        SaveAccountBottomSheet(
+            accountInput = pendingAccountInput,
+            onAccountInputChange = viewModel::onAccountInputChanged,
+            parsedAccount = pendingParsedAccount,
+            isFetchingAccount = isFetchingAccount,
+            isOfflinePreview = isOfflineAccountPreview,
+            folders = folders,
+            selectedFolderId = pendingAccountFolderId,
+            onSelectFolder = viewModel::setPendingAccountFolderId,
+            userNote = pendingAccountNote,
+            onUserNoteChange = viewModel::setPendingAccountNote,
+            tags = pendingAccountTags,
+            onTagsChange = viewModel::setPendingAccountTags,
+            onOpenCreateFolder = viewModel::openCreateFolderDialog,
+            onSave = viewModel::savePendingAccount,
+            onDismiss = viewModel::closeSaveAccountSheet
         )
     }
 
@@ -298,12 +406,22 @@ fun MainScreen(viewModel: BookmarkViewModel) {
             onConfirmMove = viewModel::moveBookmarkToFolder
         )
     }
+
+    accountToMove?.let { account ->
+        MoveAccountDialog(
+            account = account,
+            folders = folders,
+            onDismiss = viewModel::closeMoveAccountDialog,
+            onConfirmMove = viewModel::moveAccountToFolder
+        )
+    }
 }
 
 @Composable
 private fun FoldersManagerHeader(
     totalFolders: Int,
     totalBookmarks: Int,
+    totalAccounts: Int,
     onCreateFolder: () -> Unit
 ) {
     Surface(
@@ -341,12 +459,12 @@ private fun FoldersManagerHeader(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "مجموعات العلامات المرجعية",
+                            text = "مجموعات العلامات والحسابات",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "$totalFolders مجموعات · $totalBookmarks علامة مرجعية",
+                            text = "$totalFolders مجموعات · $totalBookmarks علامة مرجعية · $totalAccounts حساب",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -370,7 +488,7 @@ private fun FoldersManagerHeader(
             }
 
             Text(
-                text = "ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك المفضلة وسهولة الرجوع إليها في أي وقت.",
+                text = "ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك وحساباتك المفضلة وسهولة الرجوع إليها في أي وقت.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -453,6 +571,86 @@ private fun EmptyBookmarksView(
                 Icon(imageVector = Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("إضافة تغريدة الآن", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyAccountsView(
+    hasSearch: Boolean,
+    onClearSearch: () -> Unit,
+    onAddFirstAccount: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .clip(CircleShape)
+                .background(XBlue.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = XBlue,
+                modifier = Modifier.size(36.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        if (hasSearch) {
+            Text(
+                text = "لم يتم العثور على حسابات مطابقة",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "جرب البحث باسم آخر أو معرف مختلف أو مسح نص البحث الحالي",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = onClearSearch,
+                colors = ButtonDefaults.buttonColors(containerColor = XBlue.copy(alpha = 0.14f), contentColor = XBlue),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("مسح البحث", fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Text(
+                text = "لا توجد حسابات محفوظة في هذه المجموعة",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "احفظ حسابات منصة X المفضلة لديك في مجموعات منظمة لتسهيل الوصول إليها في أي وقت.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = onAddFirstAccount,
+                colors = ButtonDefaults.buttonColors(containerColor = XBlue),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(imageVector = Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("حفظ حساب الآن", fontWeight = FontWeight.Bold)
             }
         }
     }

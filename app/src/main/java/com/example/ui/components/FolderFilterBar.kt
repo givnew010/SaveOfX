@@ -44,7 +44,10 @@ fun FolderFilterBar(
     onSelectAll: () -> Unit,
     onToggleFavorites: () -> Unit,
     onSelectFolder: (Long) -> Unit,
-    onAddNewFolder: () -> Unit
+    onAddNewFolder: () -> Unit,
+    allLabel: String = "كل العلامات",
+    allIcon: String = "📑",
+    getFolderCount: (FolderWithCount) -> Int = { it.count }
 ) {
     val isAllSelected = selectedFolderId == null && !showFavoritesOnly
 
@@ -56,8 +59,8 @@ fun FolderFilterBar(
         item(key = "all") {
             FilterChipPill(
                 selected = isAllSelected,
-                label = "كل العلامات",
-                iconEmoji = "📑",
+                label = allLabel,
+                iconEmoji = allIcon,
                 count = totalBookmarksCount,
                 accentColor = XBlue,
                 onClick = onSelectAll
@@ -82,7 +85,7 @@ fun FolderFilterBar(
                 selected = isSelected,
                 label = folder.name,
                 iconEmoji = folder.iconEmoji,
-                count = item.count,
+                count = getFolderCount(item),
                 accentColor = parseHexColor(folder.colorHex, XBlue),
                 onClick = { onSelectFolder(folder.id) }
             )

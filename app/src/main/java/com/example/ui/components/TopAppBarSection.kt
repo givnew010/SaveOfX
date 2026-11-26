@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -57,6 +58,7 @@ import com.example.ui.theme.XBlue
 @Composable
 fun TopAppBarSection(
     totalBookmarks: Int,
+    totalAccounts: Int,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     activeTab: MainTab,
@@ -70,6 +72,12 @@ fun TopAppBarSection(
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
         ThemeMode.SYSTEM -> systemDark
+    }
+
+    val searchPlaceholder = if (activeTab == MainTab.ACCOUNTS) {
+        "ابحث بالاسم، المعرف @، النبذة، أو الوسم…"
+    } else {
+        "ابحث في محتوى التغريدة، اسم الكاتب، الوسم…"
     }
 
     Surface(
@@ -132,9 +140,11 @@ fun TopAppBarSection(
                         }
 
                         Text(
-                            text = "$totalBookmarks علامة مرجعية محفوظة",
+                            text = "$totalBookmarks علامة مرجعية · $totalAccounts حساب",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -169,7 +179,7 @@ fun TopAppBarSection(
                     onValueChange = onSearchQueryChange,
                     placeholder = {
                         Text(
-                            text = "ابحث في محتوى التغريدة، اسم الكاتب، الوسم…",
+                            text = searchPlaceholder,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -228,6 +238,12 @@ fun TopAppBarSection(
                     onClick = { onTabSelected(MainTab.BOOKMARKS) }
                 )
                 TopTabItem(
+                    selected = activeTab == MainTab.ACCOUNTS,
+                    label = "الحسابات",
+                    icon = Icons.Filled.Person,
+                    onClick = { onTabSelected(MainTab.ACCOUNTS) }
+                )
+                TopTabItem(
                     selected = activeTab == MainTab.FOLDERS,
                     label = "المجموعات",
                     icon = Icons.Filled.Folder,
@@ -256,22 +272,22 @@ private fun TopTabItem(
         onClick = onClick,
         selectedContentColor = XBlue,
         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.height(48.dp)
+        modifier = Modifier.height(54.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 6.dp)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 4.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(17.dp)
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(modifier = Modifier.width(5.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = label,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

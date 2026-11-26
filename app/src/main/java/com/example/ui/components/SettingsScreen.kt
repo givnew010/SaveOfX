@@ -89,6 +89,7 @@ private fun formatBackupDate(iso: String): String {
 fun SettingsScreen(
     totalFolders: Int,
     totalBookmarks: Int,
+    totalAccounts: Int,
     lastBackupAt: String?,
     themeMode: ThemeMode,
     onSetThemeMode: (ThemeMode) -> Unit,
@@ -207,7 +208,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "احفظ نسخة كاملة من مجموعاتك وعلاماتك المرجعية وملاحظاتك في ملف JSON لنقلها أو استعادتها في أي وقت.",
+                                text = "احفظ نسخة كاملة من مجموعاتك وعلاماتك المرجعية والحسابات المحفوظة وملاحظاتك في ملف JSON لنقلها أو استعادتها في أي وقت.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -224,7 +225,7 @@ fun SettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "$totalFolders مجموعات · $totalBookmarks علامة مرجعية",
+                                text = "$totalFolders مجموعات · $totalBookmarks علامة مرجعية · $totalAccounts حساب",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -322,7 +323,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "استورد ملف نسخة احتياطية بصيغة JSON لاسترجاع جميع المجموعات والتغريدات المحفوظة.",
+                                text = "استورد ملف نسخة احتياطية بصيغة JSON لاسترجاع جميع المجموعات والتغريدات والحسابات المحفوظة.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -337,14 +338,14 @@ fun SettingsScreen(
                         RestoreModeOptionCard(
                             selected = restoreMode == RestoreMode.MERGE,
                             title = "دمج مع البيانات الحالية",
-                            subtitle = "يضيف المجموعات والتغريدات الجديدة فقط.",
+                            subtitle = "يضيف المجموعات والعناصر الجديدة فقط.",
                             onClick = { restoreMode = RestoreMode.MERGE },
                             modifier = Modifier.weight(1f)
                         )
                         RestoreModeOptionCard(
                             selected = restoreMode == RestoreMode.REPLACE,
                             title = "استبدال البيانات الحالية",
-                            subtitle = "يستبدل جميع المجموعات والعلامات الحالية.",
+                            subtitle = "يستبدل جميع المجموعات والعلامات والحسابات الحالية.",
                             onClick = { restoreMode = RestoreMode.REPLACE },
                             modifier = Modifier.weight(1f)
                         )
@@ -495,7 +496,7 @@ fun SettingsScreen(
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = "${backup.folders.size} مجموعات · ${backup.bookmarks.size} علامة مرجعية · ${formatBackupDate(backup.exportedAt)}",
+                                            text = "${backup.folders.size} مجموعات · ${backup.bookmarks.size} علامة مرجعية · ${backup.accounts.size} حساب · ${formatBackupDate(backup.exportedAt)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

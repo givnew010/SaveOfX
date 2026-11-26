@@ -6,6 +6,9 @@ interface FolderFilterBarProps {
   selectedFolderId: number | null;
   showFavoritesOnly: boolean;
   totalBookmarksCount: number;
+  allLabel?: string;
+  allIcon?: string;
+  getFolderCount?: (item: FolderWithCount) => number;
   onSelectAll: () => void;
   onToggleFavorites: () => void;
   onSelectFolder: (folderId: number) => void;
@@ -17,6 +20,9 @@ export function FolderFilterBar({
   selectedFolderId,
   showFavoritesOnly,
   totalBookmarksCount,
+  allLabel = 'كل العلامات',
+  allIcon = '📑',
+  getFolderCount = (item) => item.count,
   onSelectAll,
   onToggleFavorites,
   onSelectFolder,
@@ -27,12 +33,12 @@ export function FolderFilterBar({
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-3">
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-        {/* All Bookmarks Filter Button */}
+        {/* All Filter Button */}
         <FilterButton
           selected={isAllSelected}
           onClick={onSelectAll}
-          label="كل العلامات"
-          icon="📑"
+          label={allLabel}
+          icon={allIcon}
           count={totalBookmarksCount}
           accentColor="#1D9BF0"
         />
@@ -57,7 +63,7 @@ export function FolderFilterBar({
               onClick={() => onSelectFolder(folder.id)}
               label={folder.name}
               icon={folder.iconEmoji}
-              count={item.count}
+              count={getFolderCount(item)}
               accentColor={folder.colorHex || '#1D9BF0'}
             />
           );

@@ -3,6 +3,7 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.AccountBookmarkEntity
 import com.example.data.AppDatabase
 import com.example.data.BackupManager
 import com.example.data.BackupPayload
@@ -12,6 +13,10 @@ import com.example.data.FolderWithCount
 import com.example.data.RestoreMode
 import com.example.data.ThemeMode
 import com.example.data.TweetBookmarkEntity
+import com.example.util.AccountFetchResult
+import com.example.util.AccountFetcher
+import com.example.util.AccountParser
+import com.example.util.ParsedAccount
 import com.example.util.ParsedTweet
 import com.example.util.TweetFetchResult
 import com.example.util.TweetFetcher
@@ -28,6 +33,7 @@ import kotlinx.coroutines.launch
 
 enum class MainTab {
     BOOKMARKS,
+    ACCOUNTS,
     FOLDERS,
     SETTINGS
 }
@@ -45,11 +51,20 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
     private val allBookmarksFlow: StateFlow<List<TweetBookmarkEntity>> = repository.allBookmarks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val allAccountsFlow: StateFlow<List<AccountBookmarkEntity>> = repository.allAccounts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _selectedFolderId = MutableStateFlow<Long?>(null)
     val selectedFolderId: StateFlow<Long?> = _selectedFolderId.asStateFlow()
 
     private val _showFavoritesOnly = MutableStateFlow(false)
     val showFavoritesOnly: StateFlow<Boolean> = _showFavoritesOnly.asStateFlow()
+
+    private val _selectedAccountFolderId = MutableStateFlow<Long?>(null)
+    val selectedAccountFolderId: StateFlow<Long?> = _selectedAccountFolderId.asStateFlow()
+
+    private val _showAccountFavoritesOnly = MutableStateFlow(false)
+    val showAccountFavoritesOnly: StateFlow<Boolean> = _showAccountFavoritesOnly.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -64,6 +79,10 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
     val lastBackupAt: StateFlow<String?> = _lastBackupAt.asStateFlow()
 
     val totalBookmarksCount: StateFlow<Int> = allBookmarksFlow
+        .combine(_searchQuery) { list, _ -> list.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val totalAccountsCount: StateFlow<Int> = allAccountsFlow
         .combine(_searchQuery) { list, _ -> list.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
@@ -87,7 +106,27 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Save Bottom Sheet state
+    val filteredAccounts: StateFlow<List<AccountBookmarkEntity>> = combine(
+        allAccountsFlow,
+        _selectedAccountFolderId,
+        _showAccountFavoritesOnly,
+        _searchQuery
+    ) { list, folderId, favOnly, query ->
+        val trimmed = query.trim().lowercase()
+        list.filter { a ->
+            val matchFolder = folderId == null || a.folderId == folderId
+            val matchFav = !favOnly || a.isFavorite
+            val matchQuery = trimmed.isEmpty() ||
+                a.displayName.lowercase().contains(trimmed) ||
+                a.handle.lowercase().contains(trimmed) ||
+                a.bio.lowercase().contains(trimmed) ||
+                (a.userNote?.lowercase()?.contains(trimmed) == true) ||
+                a.tags.lowercase().contains(trimmed)
+            matchFolder && matchFav && matchQuery
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Save Tweet Bottom Sheet state
     private val _isSaveSheetOpen = MutableStateFlow(false)
     val isSaveSheetOpen: StateFlow<Boolean> = _isSaveSheetOpen.asStateFlow()
 
@@ -112,9 +151,37 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
     private val _pendingTags = MutableStateFlow("")
     val pendingTags: StateFlow<String> = _pendingTags.asStateFlow()
 
+    // Save Account Bottom Sheet state
+    private val _isSaveAccountSheetOpen = MutableStateFlow(false)
+    val isSaveAccountSheetOpen: StateFlow<Boolean> = _isSaveAccountSheetOpen.asStateFlow()
+
+    private val _pendingAccountInput = MutableStateFlow("")
+    val pendingAccountInput: StateFlow<String> = _pendingAccountInput.asStateFlow()
+
+    private val _pendingParsedAccount = MutableStateFlow<ParsedAccount?>(null)
+    val pendingParsedAccount: StateFlow<ParsedAccount?> = _pendingParsedAccount.asStateFlow()
+
+    private val _isFetchingAccount = MutableStateFlow(false)
+    val isFetchingAccount: StateFlow<Boolean> = _isFetchingAccount.asStateFlow()
+
+    private val _isOfflineAccountPreview = MutableStateFlow(false)
+    val isOfflineAccountPreview: StateFlow<Boolean> = _isOfflineAccountPreview.asStateFlow()
+
+    private val _pendingAccountFolderId = MutableStateFlow<Long?>(null)
+    val pendingAccountFolderId: StateFlow<Long?> = _pendingAccountFolderId.asStateFlow()
+
+    private val _pendingAccountNote = MutableStateFlow("")
+    val pendingAccountNote: StateFlow<String> = _pendingAccountNote.asStateFlow()
+
+    private val _pendingAccountTags = MutableStateFlow("")
+    val pendingAccountTags: StateFlow<String> = _pendingAccountTags.asStateFlow()
+
     // Refreshing cards
     private val _refreshingBookmarkIds = MutableStateFlow<Set<Long>>(emptySet())
     val refreshingBookmarkIds: StateFlow<Set<Long>> = _refreshingBookmarkIds.asStateFlow()
+
+    private val _refreshingAccountIds = MutableStateFlow<Set<Long>>(emptySet())
+    val refreshingAccountIds: StateFlow<Set<Long>> = _refreshingAccountIds.asStateFlow()
 
     // Dialogs & feedback
     private val _showCreateFolderDialog = MutableStateFlow(false)
@@ -129,15 +196,20 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
     private val _bookmarkToMove = MutableStateFlow<TweetBookmarkEntity?>(null)
     val bookmarkToMove: StateFlow<TweetBookmarkEntity?> = _bookmarkToMove.asStateFlow()
 
+    private val _accountToMove = MutableStateFlow<AccountBookmarkEntity?>(null)
+    val accountToMove: StateFlow<AccountBookmarkEntity?> = _accountToMove.asStateFlow()
+
     private val _userFeedbackMessage = MutableStateFlow<String?>(null)
     val userFeedbackMessage: StateFlow<String?> = _userFeedbackMessage.asStateFlow()
 
     private var previewFetchJob: Job? = null
+    private var accountPreviewFetchJob: Job? = null
 
     init {
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
             refreshPendingBookmarks()
+            refreshPendingAccounts()
         }
     }
 
@@ -167,6 +239,23 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun selectAccountFolder(folderId: Long?) {
+        _selectedAccountFolderId.value = folderId
+        if (folderId != null) {
+            _showAccountFavoritesOnly.value = false
+            _activeTab.value = MainTab.ACCOUNTS
+        }
+    }
+
+    fun toggleAccountFavoritesOnly() {
+        val next = !_showAccountFavoritesOnly.value
+        _showAccountFavoritesOnly.value = next
+        if (next) {
+            _selectedAccountFolderId.value = null
+            _activeTab.value = MainTab.ACCOUNTS
+        }
+    }
+
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
     }
@@ -180,6 +269,13 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onReceiveSharedText(rawText: String) {
+        val trimmed = rawText.trim()
+        if (!TweetParser.isTweetUrl(trimmed) && AccountParser.isProfileUrl(trimmed)) {
+            _activeTab.value = MainTab.ACCOUNTS
+            openManualAccountSheet(trimmed)
+            return
+        }
+
         val parsed = TweetParser.parseSharedText(rawText)
         _pendingUrlInput.value = parsed.tweetUrl
         _pendingParsedTweet.value = parsed
@@ -329,6 +425,212 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // Account Bottom Sheet & CRUD
+    fun openManualAccountSheet(initialInput: String = "") {
+        val parsed = if (initialInput.isNotBlank()) AccountParser.parseAccountInput(initialInput) else null
+        _pendingAccountInput.value = initialInput
+        _pendingParsedAccount.value = parsed
+        _isFetchingAccount.value = false
+        _isOfflineAccountPreview.value = false
+        _pendingAccountNote.value = ""
+        _pendingAccountTags.value = ""
+        if (_pendingAccountFolderId.value == null) {
+            _pendingAccountFolderId.value = folders.value.firstOrNull()?.folder?.id
+        }
+        _isSaveAccountSheetOpen.value = true
+        if (parsed != null) {
+            fetchAccountPreview(initialInput, immediate = true)
+        }
+    }
+
+    fun closeSaveAccountSheet() {
+        accountPreviewFetchJob?.cancel()
+        _isSaveAccountSheetOpen.value = false
+        _pendingAccountInput.value = ""
+        _pendingParsedAccount.value = null
+        _isFetchingAccount.value = false
+        _isOfflineAccountPreview.value = false
+        _pendingAccountNote.value = ""
+        _pendingAccountTags.value = ""
+    }
+
+    fun onAccountInputChanged(newInput: String) {
+        _pendingAccountInput.value = newInput
+        if (newInput.isBlank()) {
+            accountPreviewFetchJob?.cancel()
+            _pendingParsedAccount.value = null
+            _isFetchingAccount.value = false
+            _isOfflineAccountPreview.value = false
+            return
+        }
+
+        val parsed = AccountParser.parseAccountInput(newInput)
+        _pendingParsedAccount.value = parsed
+        if (parsed != null) {
+            fetchAccountPreview(newInput, immediate = false)
+        } else {
+            accountPreviewFetchJob?.cancel()
+            _isFetchingAccount.value = false
+            _isOfflineAccountPreview.value = false
+        }
+    }
+
+    private fun fetchAccountPreview(rawInput: String, immediate: Boolean) {
+        accountPreviewFetchJob?.cancel()
+        accountPreviewFetchJob = viewModelScope.launch {
+            if (!immediate) delay(400L)
+            _isFetchingAccount.value = true
+            _isOfflineAccountPreview.value = false
+
+            when (val result = AccountFetcher.fetchAccount(appContext, rawInput)) {
+                is AccountFetchResult.Success -> {
+                    _pendingParsedAccount.value = result.account
+                    _isOfflineAccountPreview.value = false
+                }
+                is AccountFetchResult.Offline -> {
+                    _pendingParsedAccount.value = result.fallbackAccount
+                    _isOfflineAccountPreview.value = true
+                }
+                is AccountFetchResult.Failed -> {
+                    _pendingParsedAccount.value = result.fallbackAccount
+                    _isOfflineAccountPreview.value = !TweetFetcher.isNetworkAvailable(appContext)
+                }
+            }
+            _isFetchingAccount.value = false
+        }
+    }
+
+    fun setPendingAccountFolderId(folderId: Long) {
+        _pendingAccountFolderId.value = folderId
+    }
+
+    fun setPendingAccountNote(note: String) {
+        _pendingAccountNote.value = note
+    }
+
+    fun setPendingAccountTags(tags: String) {
+        _pendingAccountTags.value = tags
+    }
+
+    fun savePendingAccount() {
+        val rawInput = _pendingAccountInput.value.trim()
+        if (rawInput.isEmpty()) return
+
+        val parsed = _pendingParsedAccount.value ?: AccountParser.parseAccountInput(rawInput) ?: return
+        val folderId = _pendingAccountFolderId.value
+            ?: folders.value.firstOrNull()?.folder?.id
+            ?: 1L
+
+        val entity = AccountBookmarkEntity(
+            folderId = folderId,
+            profileUrl = parsed.profileUrl,
+            handle = parsed.handle,
+            displayName = parsed.displayName,
+            avatarUrl = parsed.avatarUrl,
+            bio = parsed.bio,
+            followersCount = parsed.followersCount,
+            followingCount = parsed.followingCount,
+            verified = parsed.verified,
+            userNote = _pendingAccountNote.value.trim().takeIf { it.isNotEmpty() },
+            tags = _pendingAccountTags.value.trim(),
+            isFavorite = false,
+            isProfileFetched = parsed.isProfileFetched
+        )
+
+        viewModelScope.launch {
+            val insertedId = repository.insertAccount(entity)
+            val saved = entity.copy(id = insertedId)
+            closeSaveAccountSheet()
+            showFeedback(
+                if (saved.isProfileFetched) {
+                    "تم حفظ الحساب وبياناته في المجموعة بنجاح"
+                } else {
+                    "تم حفظ الحساب في المجموعة بنجاح"
+                }
+            )
+            if (!saved.isProfileFetched) {
+                refreshSingleAccount(saved, silent = true)
+            }
+        }
+    }
+
+    fun refreshSingleAccount(account: AccountBookmarkEntity, silent: Boolean = false) {
+        if (!TweetFetcher.isNetworkAvailable(appContext)) {
+            if (!silent) showFeedback("لا يوجد اتصال بالإنترنت")
+            return
+        }
+
+        viewModelScope.launch {
+            _refreshingAccountIds.value = _refreshingAccountIds.value + account.id
+            when (val result = AccountFetcher.fetchAccount(appContext, account.profileUrl)) {
+                is AccountFetchResult.Success -> {
+                    val parsed = result.account
+                    val updated = account.copy(
+                        profileUrl = parsed.profileUrl,
+                        handle = parsed.handle,
+                        displayName = parsed.displayName.ifBlank { account.displayName },
+                        avatarUrl = parsed.avatarUrl ?: account.avatarUrl,
+                        bio = parsed.bio,
+                        followersCount = parsed.followersCount,
+                        followingCount = parsed.followingCount,
+                        verified = parsed.verified,
+                        isProfileFetched = true
+                    )
+                    repository.updateAccount(updated)
+                    if (!silent) showFeedback("تم تحديث بيانات الحساب بنجاح")
+                }
+                is AccountFetchResult.Offline -> {
+                    if (!silent) showFeedback("لا يوجد اتصال بالإنترنت")
+                }
+                is AccountFetchResult.Failed -> {
+                    if (!silent) showFeedback("تعذر جلب بيانات الحساب حالياً")
+                }
+            }
+            _refreshingAccountIds.value = _refreshingAccountIds.value - account.id
+        }
+    }
+
+    fun refreshPendingAccounts() {
+        viewModelScope.launch {
+            val unfetched = repository.getUnfetchedAccounts()
+            if (unfetched.isEmpty()) return@launch
+            if (!TweetFetcher.isNetworkAvailable(appContext)) return@launch
+            for (account in unfetched) {
+                refreshSingleAccount(account, silent = true)
+            }
+        }
+    }
+
+    fun toggleAccountFavorite(account: AccountBookmarkEntity) {
+        viewModelScope.launch {
+            repository.toggleAccountFavorite(account.id)
+        }
+    }
+
+    fun openMoveAccountDialog(account: AccountBookmarkEntity) {
+        _accountToMove.value = account
+    }
+
+    fun closeMoveAccountDialog() {
+        _accountToMove.value = null
+    }
+
+    fun moveAccountToFolder(newFolderId: Long) {
+        val target = _accountToMove.value ?: return
+        viewModelScope.launch {
+            repository.moveAccount(target.id, newFolderId)
+            _accountToMove.value = null
+            showFeedback("تم نقل الحساب إلى المجموعة الجديدة")
+        }
+    }
+
+    fun deleteAccount(accountId: Long) {
+        viewModelScope.launch {
+            repository.deleteAccount(accountId)
+            showFeedback("تم حذف الحساب من المجموعة")
+        }
+    }
+
     fun refreshSingleBookmark(bookmark: TweetBookmarkEntity, silent: Boolean = false) {
         if (!TweetParser.isTweetUrl(bookmark.tweetUrl)) {
             if (!silent) showFeedback("الرابط لا يشير إلى منشور X صالح")
@@ -456,6 +758,7 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
             )
             _showCreateFolderDialog.value = false
             _pendingSelectedFolderId.value = createdId
+            _pendingAccountFolderId.value = createdId
             showFeedback("تم إنشاء المجموعة بنجاح")
         }
     }
@@ -500,6 +803,9 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
             if (_selectedFolderId.value == target.folder.id) {
                 _selectedFolderId.value = null
             }
+            if (_selectedAccountFolderId.value == target.folder.id) {
+                _selectedAccountFolderId.value = null
+            }
             _folderToDelete.value = null
             showFeedback("تم حذف المجموعة بنجاح")
         }
@@ -517,10 +823,12 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
             val result = repository.restoreBackup(payload, mode)
             _selectedFolderId.value = null
             _showFavoritesOnly.value = false
+            _selectedAccountFolderId.value = null
+            _showAccountFavoritesOnly.value = false
             val message = if (mode == RestoreMode.REPLACE) {
-                "تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية بنجاح"
+                "تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب بنجاح"
             } else {
-                "تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية جديدة"
+                "تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية جديدة و ${result.accountsAdded} حساب جديد"
             }
             showFeedback(message)
         }

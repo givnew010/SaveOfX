@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.data.AccountBookmarkEntity
 import com.example.data.BackupManager
 import com.example.data.FolderEntity
 import com.example.data.RestoreMode
@@ -29,16 +30,36 @@ class BackupManagerTest {
                 isContentFetched = true
             )
         )
+        val accounts = listOf(
+            AccountBookmarkEntity(
+                id = 20L,
+                folderId = 2L,
+                profileUrl = "https://x.com/AndroidDev",
+                handle = "@AndroidDev",
+                displayName = "Android Developers",
+                bio = "Official Android dev account",
+                followersCount = 2150000L,
+                verified = true,
+                isProfileFetched = true
+            )
+        )
 
-        val payload = BackupManager.buildPayload(folders, bookmarks, exportedAt = "2026-11-24T12:00:00.000Z")
+        val payload = BackupManager.buildPayload(
+            folders = folders,
+            bookmarks = bookmarks,
+            accounts = accounts,
+            exportedAt = "2026-11-24T12:00:00.000Z"
+        )
         val json = BackupManager.serializePayload(payload)
         val parsed = BackupManager.parseBackupJson(json)
 
         assertNotNull(parsed)
         assertEquals(2, parsed!!.folders.size)
         assertEquals(1, parsed.bookmarks.size)
+        assertEquals(1, parsed.accounts.size)
         assertEquals("تقنية", parsed.folders[1].name)
         assertEquals("Compose guide", parsed.bookmarks[0].content)
+        assertEquals("@AndroidDev", parsed.accounts[0].handle)
     }
 
     @Test
@@ -49,7 +70,7 @@ class BackupManagerTest {
     }
 
     @Test
-    fun planRestore_mergeDeduplicatesUrlsAndMapsFolders() {
+    fun planRestore_mergeDeduplicatesUrlsAndAccountsAndMapsFolders() {
         val existingFolders = listOf(
             FolderEntity(id = 1L, name = "العامة", isDefault = true),
             FolderEntity(id = 2L, name = "تقنية", isDefault = false)
@@ -63,6 +84,15 @@ class BackupManagerTest {
                 authorName = "User",
                 authorHandle = "@user",
                 content = "Existing"
+            )
+        )
+        val existingAccounts = listOf(
+            AccountBookmarkEntity(
+                id = 1L,
+                folderId = 2L,
+                profileUrl = "https://x.com/AndroidDev",
+                handle = "@AndroidDev",
+                displayName = "Android Developers"
             )
         )
 
@@ -90,14 +120,39 @@ class BackupManagerTest {
                     authorHandle = "@designer",
                     content = "New tweet"
                 )
+            ),
+            accounts = listOf(
+                AccountBookmarkEntity(
+                    id = 30L,
+                    folderId = 5L,
+                    profileUrl = "https://x.com/androiddev",
+                    handle = "@AndroidDev",
+                    displayName = "Duplicate Account"
+                ),
+                AccountBookmarkEntity(
+                    id = 31L,
+                    folderId = 6L,
+                    profileUrl = "https://x.com/karpathy",
+                    handle = "@karpathy",
+                    displayName = "Andrej Karpathy"
+                )
             )
         )
 
-        val plan = BackupManager.planRestore(incoming, RestoreMode.MERGE, existingFolders, existingBookmarks)
+        val plan = BackupManager.planRestore(
+            payload = incoming,
+            mode = RestoreMode.MERGE,
+            existingFolders = existingFolders,
+            existingBookmarks = existingBookmarks,
+            existingAccounts = existingAccounts
+        )
         assertEquals(1, plan.foldersAddedCount)
         assertEquals(1, plan.bookmarksAddedCount)
+        assertEquals(1, plan.accountsAddedCount)
         assertEquals("تصميم", plan.foldersToSave.first().name)
         assertEquals(3L, plan.bookmarksToSave.first().folderId)
+        assertEquals(3L, plan.accountsToSave.first().folderId)
+        assertEquals("@karpathy", plan.accountsToSave.first().handle)
         assertTrue(!plan.isReplace)
     }
 }

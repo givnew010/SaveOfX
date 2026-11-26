@@ -12,10 +12,10 @@ import kotlinx.coroutines.flow.Flow
 interface FolderDao {
     @Query(
         """
-        SELECT f.*, COUNT(b.id) AS count
+        SELECT f.*,
+               (SELECT COUNT(*) FROM bookmarks b WHERE b.folderId = f.id) AS count,
+               (SELECT COUNT(*) FROM accounts a WHERE a.folderId = f.id) AS accountsCount
         FROM folders f
-        LEFT JOIN bookmarks b ON f.id = b.folderId
-        GROUP BY f.id
         ORDER BY f.isDefault DESC, f.createdAt ASC
         """
     )

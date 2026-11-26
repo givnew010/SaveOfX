@@ -26,6 +26,19 @@ export interface ParsedTweet {
   isContentFetched: boolean;
 }
 
+export interface ParsedAccount {
+  profileUrl: string;
+  handle: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  bio: string;
+  followersCount: number;
+  followingCount: number;
+  verified: boolean;
+  isProfileFetched: boolean;
+}
+
 export interface FolderEntity {
   id: number;
   name: string;
@@ -61,12 +74,31 @@ export interface TweetBookmarkEntity {
   quoteText?: string;
 }
 
+export interface AccountBookmarkEntity {
+  id: number;
+  folderId: number;
+  profileUrl: string;
+  handle: string;
+  displayName: string;
+  avatarUrl?: string;
+  bio: string;
+  followersCount: number;
+  followingCount: number;
+  verified: boolean;
+  savedAt: number;
+  userNote?: string;
+  tags: string;
+  isFavorite: boolean;
+  isProfileFetched: boolean;
+}
+
 export interface FolderWithCount {
   folder: FolderEntity;
   count: number;
+  accountCount: number;
 }
 
-export type MainTab = 'BOOKMARKS' | 'FOLDERS' | 'SETTINGS';
+export type MainTab = 'BOOKMARKS' | 'ACCOUNTS' | 'FOLDERS' | 'SETTINGS';
 
 export interface BackupPayload {
   app: string;
@@ -74,4 +106,5 @@ export interface BackupPayload {
   exportedAt: string;
   folders: FolderEntity[];
   bookmarks: TweetBookmarkEntity[];
+  accounts?: AccountBookmarkEntity[];
 }

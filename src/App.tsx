@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Bookmark, FolderPlus, FolderHeart, Plus } from 'lucide-react';
+import { Bookmark, FolderPlus, FolderHeart, Plus, UserPlus, Users } from 'lucide-react';
+import { AccountCard } from './components/AccountCard';
 import { FolderCard } from './components/FolderCard';
 import {
   CreateFolderDialog,
   DeleteFolderDialog,
   EditFolderDialog,
+  MoveAccountDialog,
   MoveBookmarkDialog,
 } from './components/FolderDialogs';
 import { FolderFilterBar } from './components/FolderFilterBar';
+import { SaveAccountSheet } from './components/SaveAccountSheet';
 import { SaveBookmarkSheet } from './components/SaveBookmarkSheet';
 import { SettingsView } from './components/SettingsView';
 import { TopAppBarSection } from './components/TopAppBarSection';
@@ -58,6 +61,7 @@ export function App() {
     >
       <TopAppBarSection
         totalBookmarks={store.totalBookmarksCount}
+        totalAccounts={store.totalAccountsCount}
         searchQuery={store.searchQuery}
         onSearchQueryChange={store.setSearchQuery}
         activeTab={store.activeTab}
@@ -74,6 +78,9 @@ export function App() {
               selectedFolderId={store.selectedFolderId}
               showFavoritesOnly={store.showFavoritesOnly}
               totalBookmarksCount={store.totalBookmarksCount}
+              allLabel="كل العلامات"
+              allIcon="📑"
+              getFolderCount={(item) => item.count}
               onSelectAll={() => store.selectFolder(null)}
               onToggleFavorites={store.toggleFavoritesOnly}
               onSelectFolder={(id) => store.selectFolder(id)}
@@ -115,11 +122,63 @@ export function App() {
               )}
             </div>
           </>
+        ) : store.activeTab === 'ACCOUNTS' ? (
+          <>
+            <FolderFilterBar
+              folders={store.folders}
+              selectedFolderId={store.selectedAccountFolderId}
+              showFavoritesOnly={store.showAccountFavoritesOnly}
+              totalBookmarksCount={store.totalAccountsCount}
+              allLabel="كل الحسابات"
+              allIcon="👥"
+              getFolderCount={(item) => item.accountCount}
+              onSelectAll={() => store.selectAccountFolder(null)}
+              onToggleFavorites={store.toggleAccountFavoritesOnly}
+              onSelectFolder={(id) => store.selectAccountFolder(id)}
+              onAddNewFolder={store.openCreateFolderDialog}
+            />
+
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-1">
+              {store.accounts.length === 0 ? (
+                <EmptyAccountsView
+                  hasSearch={store.searchQuery.trim().length > 0}
+                  onClearSearch={() => store.setSearchQuery('')}
+                  onAddFirstAccount={() => store.openManualAccountSheet()}
+                />
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                  {store.accounts.map((account) => {
+                    const folder = store.folders.find(
+                      (item) => item.folder.id === account.folderId
+                    )?.folder;
+                    return (
+                      <AccountCard
+                        key={account.id}
+                        account={account}
+                        folder={folder}
+                        isRefreshing={store.refreshingAccountIds.has(account.id)}
+                        onRefreshProfile={() =>
+                          void store.refreshSingleAccount(account)
+                        }
+                        onToggleFavorite={() => store.toggleAccountFavorite(account)}
+                        onMoveToFolder={() =>
+                          store.openMoveAccountDialog(account)
+                        }
+                        onDelete={() => store.deleteAccount(account.id)}
+                        onFeedback={store.showFeedback}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
         ) : store.activeTab === 'FOLDERS' ? (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 space-y-4">
             <FoldersManagerHeader
               totalFolders={store.folders.length}
               totalBookmarks={store.totalBookmarksCount}
+              totalAccounts={store.totalAccountsCount}
               onCreateFolder={store.openCreateFolderDialog}
             />
 
@@ -139,6 +198,7 @@ export function App() {
           <SettingsView
             totalFolders={store.folders.length}
             totalBookmarks={store.totalBookmarksCount}
+            totalAccounts={store.totalAccountsCount}
             lastBackupAt={store.lastBackupAt}
             isDarkMode={isDarkMode}
             onSetDarkMode={setIsDarkMode}
@@ -160,6 +220,15 @@ export function App() {
             >
               <Plus className="w-5 h-5" />
               <span>حفظ منشور</span>
+            </button>
+          ) : store.activeTab === 'ACCOUNTS' ? (
+            <button
+              type="button"
+              onClick={() => store.openManualAccountSheet()}
+              className="h-14 px-5 rounded-2xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white font-bold text-sm sm:text-base shadow-lg shadow-[#1D9BF0]/30 flex items-center gap-2 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0]"
+            >
+              <UserPlus className="w-5 h-5" />
+              <span>حفظ حساب</span>
             </button>
           ) : (
             <button
@@ -206,6 +275,27 @@ export function App() {
         />
       )}
 
+      {/* Save Account Sheet */}
+      {store.isAccountSheetOpen && (
+        <SaveAccountSheet
+          accountInput={store.pendingAccountInput}
+          onAccountInputChange={store.onAccountInputChanged}
+          parsedAccount={store.pendingParsedAccount}
+          isFetchingAccount={store.isFetchingAccount}
+          isOfflinePreview={store.isOfflineAccountPreview}
+          folders={store.folders}
+          selectedFolderId={store.pendingAccountFolderId}
+          onSelectFolder={store.setPendingAccountFolderId}
+          userNote={store.pendingAccountNote}
+          onUserNoteChange={store.setPendingAccountNote}
+          tags={store.pendingAccountTags}
+          onTagsChange={store.setPendingAccountTags}
+          onOpenCreateFolder={store.openCreateFolderDialog}
+          onSave={store.savePendingAccount}
+          onDismiss={store.closeAccountSheet}
+        />
+      )}
+
       {/* Folder & Move Dialogs */}
       {store.showCreateFolderDialog && (
         <CreateFolderDialog
@@ -240,6 +330,15 @@ export function App() {
           onConfirmMove={store.moveBookmarkToFolder}
         />
       )}
+
+      {store.accountToMove && (
+        <MoveAccountDialog
+          account={store.accountToMove}
+          folders={store.folders}
+          onDismiss={store.closeMoveAccountDialog}
+          onConfirmMove={store.moveAccountToFolder}
+        />
+      )}
     </div>
   );
 }
@@ -247,10 +346,12 @@ export function App() {
 function FoldersManagerHeader({
   totalFolders,
   totalBookmarks,
+  totalAccounts,
   onCreateFolder,
 }: {
   totalFolders: number;
   totalBookmarks: number;
+  totalAccounts: number;
   onCreateFolder: () => void;
 }) {
   return (
@@ -262,10 +363,10 @@ function FoldersManagerHeader({
           </div>
           <div>
             <h2 className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]">
-              مجموعات العلامات المرجعية
+              مجموعات العلامات المرجعية والحسابات
             </h2>
             <p className="text-xs text-[#536471] dark:text-[#8B949E] tabular-nums">
-              {totalFolders} مجموعات · {totalBookmarks} علامة مرجعية
+              {totalFolders} مجموعات · {totalBookmarks} علامة مرجعية · {totalAccounts} حساب
             </p>
           </div>
         </div>
@@ -281,7 +382,7 @@ function FoldersManagerHeader({
       </div>
 
       <p className="text-xs sm:text-sm text-[#536471] dark:text-[#8B949E] leading-relaxed">
-        ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك المفضلة وسهولة الرجوع إليها في أي وقت.
+        ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك وحساباتك المفضلة وسهولة الرجوع إليها في أي وقت.
       </p>
     </div>
   );
@@ -333,6 +434,59 @@ function EmptyBookmarksView({
           >
             <Plus className="w-4 h-4" />
             <span>إضافة تغريدة الآن</span>
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function EmptyAccountsView({
+  hasSearch,
+  onClearSearch,
+  onAddFirstAccount,
+}: {
+  hasSearch: boolean;
+  onClearSearch: () => void;
+  onAddFirstAccount: () => void;
+}) {
+  return (
+    <div className="py-16 px-4 flex flex-col items-center justify-center text-center max-w-md mx-auto gap-3.5">
+      <div className="w-20 h-20 rounded-full bg-[#1D9BF0]/12 border-2 border-[#1D9BF0]/30 text-[#1D9BF0] flex items-center justify-center">
+        <Users className="w-9 h-9" />
+      </div>
+
+      {hasSearch ? (
+        <>
+          <h3 className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]">
+            لم يتم العثور على حسابات مطابقة
+          </h3>
+          <p className="text-sm text-[#536471] dark:text-[#8B949E]">
+            جرب البحث باسم آخر أو مسح نص البحث الحالي
+          </p>
+          <button
+            type="button"
+            onClick={onClearSearch}
+            className="min-h-[42px] px-5 py-2 rounded-xl bg-[#1D9BF0]/15 hover:bg-[#1D9BF0]/25 text-[#1D9BF0] font-bold text-sm transition-colors"
+          >
+            مسح البحث
+          </button>
+        </>
+      ) : (
+        <>
+          <h3 className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]">
+            لا توجد حسابات في هذه المجموعة
+          </h3>
+          <p className="text-sm text-[#536471] dark:text-[#8B949E] leading-relaxed">
+            احفظ حسابات منصة 𝕏 المهمة لك داخل مجموعات مخصصة لمتابعتها والرجوع إليها بسهولة في أي وقت.
+          </p>
+          <button
+            type="button"
+            onClick={onAddFirstAccount}
+            className="mt-1 min-h-[44px] px-5 py-2.5 rounded-xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white font-bold text-sm flex items-center gap-2 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>حفظ حساب الآن</span>
           </button>
         </>
       )}

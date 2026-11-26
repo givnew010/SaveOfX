@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshPendingBookmarks()
+        viewModel.refreshPendingAccounts()
     }
 
     private fun handleIncomingIntent(intent: Intent?) {

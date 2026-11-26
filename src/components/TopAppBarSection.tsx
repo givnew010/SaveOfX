@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Bookmark, Folder, Moon, Search, Settings, Sun, X } from 'lucide-react';
+import { Bookmark, Folder, Moon, Search, Settings, Sun, Users, X } from 'lucide-react';
 import type { MainTab } from '../types/bookmark';
 
 interface TopAppBarSectionProps {
   totalBookmarks: number;
+  totalAccounts: number;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   activeTab: MainTab;
@@ -14,6 +15,7 @@ interface TopAppBarSectionProps {
 
 export function TopAppBarSection({
   totalBookmarks,
+  totalAccounts,
   searchQuery,
   onSearchQueryChange,
   activeTab,
@@ -52,7 +54,7 @@ export function TopAppBarSection({
                 </span>
               </div>
               <p className="text-xs text-[#536471] dark:text-[#8B949E] tabular-nums whitespace-nowrap">
-                {totalBookmarks} علامة مرجعية محفوظة
+                {totalBookmarks} علامة مرجعية · {totalAccounts} حساب
               </p>
             </div>
           </div>
@@ -91,7 +93,11 @@ export function TopAppBarSection({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => onSearchQueryChange(e.target.value)}
-                placeholder="ابحث في محتوى التغريدة، اسم الكاتب، الوسم…"
+                placeholder={
+                  activeTab === 'ACCOUNTS'
+                    ? 'ابحث في الحسابات، الاسم، المعرف، النبذة، الوسم…'
+                    : 'ابحث في محتوى التغريدة، اسم الكاتب، الوسم…'
+                }
                 autoFocus
                 className="w-full h-11 pr-11 pl-10 rounded-full border border-[#E2E8F0] dark:border-[#30363D] bg-[#EFF3F4]/60 dark:bg-[#21262D]/60 text-sm text-[#0F1419] dark:text-[#F0F6FC] placeholder:text-[#536471] dark:placeholder:text-[#8B949E] focus:outline-none focus:border-[#1D9BF0] focus:bg-white dark:focus:bg-[#161B22] transition-colors"
               />
@@ -109,20 +115,20 @@ export function TopAppBarSection({
           </div>
         )}
 
-        {/* Tab Row (Bookmarks Feed vs Collections vs Settings) */}
-        <div className="grid grid-cols-3" role="tablist" aria-label="الأقسام الرئيسية">
+        {/* Tab Row (Bookmarks vs Accounts vs Collections vs Settings) */}
+        <div className="grid grid-cols-4" role="tablist" aria-label="الأقسام الرئيسية">
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === 'BOOKMARKS'}
             onClick={() => onTabSelected('BOOKMARKS')}
-            className={`relative min-h-[46px] px-2 flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
+            className={`relative min-h-[54px] sm:min-h-[48px] px-1 sm:px-2 py-2 sm:py-0 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-[11px] sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
               activeTab === 'BOOKMARKS'
                 ? 'text-[#1D9BF0] font-bold'
                 : 'text-[#536471] dark:text-[#8B949E] font-medium hover:text-[#0F1419] dark:hover:text-[#F0F6FC]'
             }`}
           >
-            <Bookmark className="w-[17px] h-[17px] shrink-0" />
+            <Bookmark className="w-4 h-4 shrink-0" />
             <span>العلامات المرجعية</span>
             {activeTab === 'BOOKMARKS' && (
               <span className="absolute bottom-0 inset-x-0 h-[3px] bg-[#1D9BF0]" />
@@ -132,15 +138,33 @@ export function TopAppBarSection({
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === 'ACCOUNTS'}
+            onClick={() => onTabSelected('ACCOUNTS')}
+            className={`relative min-h-[54px] sm:min-h-[48px] px-1 sm:px-2 py-2 sm:py-0 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-[11px] sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
+              activeTab === 'ACCOUNTS'
+                ? 'text-[#1D9BF0] font-bold'
+                : 'text-[#536471] dark:text-[#8B949E] font-medium hover:text-[#0F1419] dark:hover:text-[#F0F6FC]'
+            }`}
+          >
+            <Users className="w-4 h-4 shrink-0" />
+            <span>الحسابات</span>
+            {activeTab === 'ACCOUNTS' && (
+              <span className="absolute bottom-0 inset-x-0 h-[3px] bg-[#1D9BF0]" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === 'FOLDERS'}
             onClick={() => onTabSelected('FOLDERS')}
-            className={`relative min-h-[46px] px-2 flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
+            className={`relative min-h-[54px] sm:min-h-[48px] px-1 sm:px-2 py-2 sm:py-0 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-[11px] sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
               activeTab === 'FOLDERS'
                 ? 'text-[#1D9BF0] font-bold'
                 : 'text-[#536471] dark:text-[#8B949E] font-medium hover:text-[#0F1419] dark:hover:text-[#F0F6FC]'
             }`}
           >
-            <Folder className="w-[17px] h-[17px] shrink-0" />
+            <Folder className="w-4 h-4 shrink-0" />
             <span>المجموعات</span>
             {activeTab === 'FOLDERS' && (
               <span className="absolute bottom-0 inset-x-0 h-[3px] bg-[#1D9BF0]" />
@@ -152,13 +176,13 @@ export function TopAppBarSection({
             role="tab"
             aria-selected={activeTab === 'SETTINGS'}
             onClick={() => onTabSelected('SETTINGS')}
-            className={`relative min-h-[46px] px-2 flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
+            className={`relative min-h-[54px] sm:min-h-[48px] px-1 sm:px-2 py-2 sm:py-0 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-[11px] sm:text-sm transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#1D9BF0] ${
               activeTab === 'SETTINGS'
                 ? 'text-[#1D9BF0] font-bold'
                 : 'text-[#536471] dark:text-[#8B949E] font-medium hover:text-[#0F1419] dark:hover:text-[#F0F6FC]'
             }`}
           >
-            <Settings className="w-[17px] h-[17px] shrink-0" />
+            <Settings className="w-4 h-4 shrink-0" />
             <span>الإعدادات</span>
             {activeTab === 'SETTINGS' && (
               <span className="absolute bottom-0 inset-x-0 h-[3px] bg-[#1D9BF0]" />

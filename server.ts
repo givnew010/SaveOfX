@@ -294,6 +294,86 @@ function parseOEmbedJson(
   };
 }
 
+interface FxUserResponse {
+  code?: number;
+  user?: {
+    id?: string;
+    name?: string;
+    screen_name?: string;
+    avatar_url?: string;
+    description?: string;
+    followers?: number;
+    following?: number;
+    verification?: {
+      verified?: boolean;
+    };
+  };
+}
+
+interface ParsedAccount {
+  profileUrl: string;
+  handle: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  bio: string;
+  followersCount: number;
+  followingCount: number;
+  verified: boolean;
+  isProfileFetched: boolean;
+}
+
+const ACCOUNT_RESERVED_PATHS = new Set([
+  'home',
+  'explore',
+  'search',
+  'notifications',
+  'messages',
+  'i',
+  'intent',
+  'settings',
+  'compose',
+  'hashtag',
+  'share',
+  'login',
+  'signup',
+]);
+
+function extractAccountUsername(rawInput: string): string | null {
+  const trimmed = rawInput.trim();
+  if (!trimmed) return null;
+  const directMatch = trimmed.match(/^@?([a-zA-Z0-9_]{1,15})$/);
+  if (directMatch && directMatch[1]) {
+    return ACCOUNT_RESERVED_PATHS.has(directMatch[1].toLowerCase()) ? null : directMatch[1];
+  }
+  const urlMatch = trimmed.match(
+    /https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com|fxtwitter\.com|vxtwitter\.com)\/([a-zA-Z0-9_]{1,15})(?:[/?#]\S*)?/i
+  );
+  if (urlMatch && urlMatch[1]) {
+    return ACCOUNT_RESERVED_PATHS.has(urlMatch[1].toLowerCase()) ? null : urlMatch[1];
+  }
+  return null;
+}
+
+function parseFxUserJson(root: FxUserResponse, fallbackUsername: string): ParsedAccount | null {
+  const user = root?.user;
+  if (!user) return null;
+  const username = user.screen_name?.trim() || fallbackUsername;
+  const displayName = user.name?.trim() || username;
+  return {
+    profileUrl: `https://x.com/${username}`,
+    handle: `@${username}`,
+    username,
+    displayName,
+    avatarUrl: user.avatar_url?.trim() || undefined,
+    bio: user.description?.trim() || '',
+    followersCount: typeof user.followers === 'number' ? user.followers : 0,
+    followingCount: typeof user.following === 'number' ? user.following : 0,
+    verified: Boolean(user.verification?.verified),
+    isProfileFetched: true,
+  };
+}
+
 async function createServer() {
   const app = express();
   app.use(express.json());
@@ -345,6 +425,29 @@ async function createServer() {
     }
 
     res.status(502).json({ ok: false, reason: 'تعذر جلب تفاصيل المنشور' });
+  });
+
+  app.get('/api/account', async (req: Request, res: Response) => {
+    const rawInput = typeof req.query.input === 'string' ? req.query.input : '';
+    const username = extractAccountUsername(rawInput);
+
+    if (!username) {
+      res.status(400).json({ ok: false, reason: 'اسم المستخدم أو رابط الحساب غير صالح' });
+      return;
+    }
+
+    const fxUser = await fetchJsonWithTimeout<FxUserResponse>(
+      `https://api.fxtwitter.com/${encodeURIComponent(username)}`
+    );
+    if (fxUser) {
+      const parsed = parseFxUserJson(fxUser, username);
+      if (parsed) {
+        res.json({ ok: true, account: parsed });
+        return;
+      }
+    }
+
+    res.status(502).json({ ok: false, reason: 'تعذر جلب بيانات الحساب حالياً' });
   });
 
   const isProd = process.env.NODE_ENV === 'production';

@@ -18,6 +18,7 @@ import type { BackupPayload } from '../types/bookmark';
 interface SettingsViewProps {
   totalFolders: number;
   totalBookmarks: number;
+  totalAccounts: number;
   lastBackupAt: string | null;
   isDarkMode: boolean;
   onSetDarkMode: (dark: boolean) => void;
@@ -40,6 +41,7 @@ function formatDateTime(iso: string): string {
 export function SettingsView({
   totalFolders,
   totalBookmarks,
+  totalAccounts,
   lastBackupAt,
   isDarkMode,
   onSetDarkMode,
@@ -157,12 +159,16 @@ export function SettingsView({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#EFF3F4]/60 dark:bg-[#21262D]/60 px-4 py-3 text-xs sm:text-sm">
-          <div className="flex items-center gap-2 text-[#0F1419] dark:text-[#F0F6FC] font-medium tabular-nums">
+          <div className="flex flex-wrap items-center gap-2 text-[#0F1419] dark:text-[#F0F6FC] font-medium tabular-nums">
             <span>{totalFolders} مجموعات</span>
             <span aria-hidden="true" className="text-[#536471] dark:text-[#8B949E]">
               ·
             </span>
             <span>{totalBookmarks} علامة مرجعية</span>
+            <span aria-hidden="true" className="text-[#536471] dark:text-[#8B949E]">
+              ·
+            </span>
+            <span>{totalAccounts} حساب</span>
           </div>
           <div className="text-xs text-[#536471] dark:text-[#8B949E]">
             {lastBackupAt
@@ -350,7 +356,7 @@ export function SettingsView({
                   النسخة الاحتياطية جاهزة للاستعادة ({pendingSourceName})
                 </p>
                 <p className="text-xs text-[#536471] dark:text-[#8B949E] mt-1 tabular-nums">
-                  {pendingBackup.folders.length} مجموعات · {pendingBackup.bookmarks.length} علامة مرجعية · تاريخ التصدير: {formatDateTime(pendingBackup.exportedAt)}
+                  {pendingBackup.folders.length} مجموعات · {pendingBackup.bookmarks.length} علامة مرجعية · {pendingBackup.accounts?.length ?? 0} حساب · تاريخ التصدير: {formatDateTime(pendingBackup.exportedAt)}
                 </p>
               </div>
             </div>
