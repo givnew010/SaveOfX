@@ -3,8 +3,11 @@ package com.example
 import com.example.data.AccountBookmarkEntity
 import com.example.data.BackupManager
 import com.example.data.FolderEntity
+import com.example.data.PersonEntity
 import com.example.data.RestoreMode
 import com.example.data.TweetBookmarkEntity
+import com.example.util.PersonWorkCodec
+import com.example.util.PersonWorkItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -43,11 +46,31 @@ class BackupManagerTest {
                 isProfileFetched = true
             )
         )
+        val people = listOf(
+            PersonEntity(
+                id = 30L,
+                folderId = 2L,
+                name = "عمر الشريف",
+                role = "ممثل",
+                bio = "ممثل عالمي",
+                worksJson = PersonWorkCodec.serializeWorks(
+                    listOf(
+                        PersonWorkItem(
+                            id = "w1",
+                            type = "link",
+                            title = "IMDb",
+                            url = "https://www.imdb.com/name/nm0001725/"
+                        )
+                    )
+                )
+            )
+        )
 
         val payload = BackupManager.buildPayload(
             folders = folders,
             bookmarks = bookmarks,
             accounts = accounts,
+            people = people,
             exportedAt = "2026-11-24T12:00:00.000Z"
         )
         val json = BackupManager.serializePayload(payload)
@@ -57,9 +80,44 @@ class BackupManagerTest {
         assertEquals(2, parsed!!.folders.size)
         assertEquals(1, parsed.bookmarks.size)
         assertEquals(1, parsed.accounts.size)
+        assertEquals(1, parsed.people.size)
         assertEquals("تقنية", parsed.folders[1].name)
         assertEquals("Compose guide", parsed.bookmarks[0].content)
         assertEquals("@AndroidDev", parsed.accounts[0].handle)
+        assertEquals("عمر الشريف", parsed.people[0].name)
+        assertEquals(1, PersonWorkCodec.parseWorks(parsed.people[0].worksJson).size)
+    }
+
+    @Test
+    fun parseBackupJson_acceptsWebWorksArrayFormat() {
+        val webBackupJson = """
+            {
+              "app": "X Folders",
+              "version": 3,
+              "exportedAt": "2026-11-26T10:00:00.000Z",
+              "folders": [{"id": 1, "name": "العامة", "isDefault": true}],
+              "bookmarks": [],
+              "accounts": [],
+              "people": [
+                {
+                  "id": 9,
+                  "folderId": 1,
+                  "name": "أحمد حلمي",
+                  "role": "ممثل",
+                  "works": [
+                    {"id": "w_web", "type": "photo", "title": "ملصق", "url": "https://example.com/poster.jpg", "addedAt": 1700000000000}
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val parsed = BackupManager.parseBackupJson(webBackupJson)
+        assertNotNull(parsed)
+        assertEquals(1, parsed!!.people.size)
+        val parsedWorks = PersonWorkCodec.parseWorks(parsed.people[0].worksJson)
+        assertEquals(1, parsedWorks.size)
+        assertEquals("photo", parsedWorks[0].type)
     }
 
     @Test
@@ -70,7 +128,7 @@ class BackupManagerTest {
     }
 
     @Test
-    fun planRestore_mergeDeduplicatesUrlsAndAccountsAndMapsFolders() {
+    fun planRestore_mergeDeduplicatesUrlsAccountsAndPeopleAndMapsFolders() {
         val existingFolders = listOf(
             FolderEntity(id = 1L, name = "العامة", isDefault = true),
             FolderEntity(id = 2L, name = "تقنية", isDefault = false)
@@ -93,6 +151,14 @@ class BackupManagerTest {
                 profileUrl = "https://x.com/AndroidDev",
                 handle = "@AndroidDev",
                 displayName = "Android Developers"
+            )
+        )
+        val existingPeople = listOf(
+            PersonEntity(
+                id = 1L,
+                folderId = 2L,
+                name = "كريستوفر نولان",
+                role = "مخرج"
             )
         )
 
@@ -136,6 +202,20 @@ class BackupManagerTest {
                     handle = "@karpathy",
                     displayName = "Andrej Karpathy"
                 )
+            ),
+            people = listOf(
+                PersonEntity(
+                    id = 40L,
+                    folderId = 5L,
+                    name = "كريستوفر نولان",
+                    role = "مخرج"
+                ),
+                PersonEntity(
+                    id = 41L,
+                    folderId = 6L,
+                    name = "عمر الشريف",
+                    role = "ممثل"
+                )
             )
         )
 
@@ -144,15 +224,19 @@ class BackupManagerTest {
             mode = RestoreMode.MERGE,
             existingFolders = existingFolders,
             existingBookmarks = existingBookmarks,
-            existingAccounts = existingAccounts
+            existingAccounts = existingAccounts,
+            existingPeople = existingPeople
         )
         assertEquals(1, plan.foldersAddedCount)
         assertEquals(1, plan.bookmarksAddedCount)
         assertEquals(1, plan.accountsAddedCount)
+        assertEquals(1, plan.peopleAddedCount)
         assertEquals("تصميم", plan.foldersToSave.first().name)
         assertEquals(3L, plan.bookmarksToSave.first().folderId)
         assertEquals(3L, plan.accountsToSave.first().folderId)
+        assertEquals(3L, plan.peopleToSave.first().folderId)
         assertEquals("@karpathy", plan.accountsToSave.first().handle)
+        assertEquals("عمر الشريف", plan.peopleToSave.first().name)
         assertTrue(!plan.isReplace)
     }
 }

@@ -92,13 +92,39 @@ export interface AccountBookmarkEntity {
   isProfileFetched: boolean;
 }
 
+export type PersonWorkType = 'link' | 'photo' | 'video' | 'other';
+
+export interface PersonWorkItem {
+  id: string;
+  type: PersonWorkType;
+  title: string;
+  url: string;
+  note?: string;
+  addedAt: number;
+}
+
+export interface PersonEntity {
+  id: number;
+  folderId: number;
+  name: string;
+  role: string;
+  avatarUrl?: string;
+  bio: string;
+  userNote?: string;
+  tags: string;
+  works: PersonWorkItem[];
+  isFavorite: boolean;
+  savedAt: number;
+}
+
 export interface FolderWithCount {
   folder: FolderEntity;
   count: number;
   accountCount: number;
+  peopleCount: number;
 }
 
-export type MainTab = 'BOOKMARKS' | 'ACCOUNTS' | 'FOLDERS' | 'SETTINGS';
+export type MainTab = 'BOOKMARKS' | 'ACCOUNTS' | 'PEOPLE' | 'FOLDERS' | 'SETTINGS';
 
 export interface BackupPayload {
   app: string;
@@ -107,4 +133,5 @@ export interface BackupPayload {
   folders: FolderEntity[];
   bookmarks: TweetBookmarkEntity[];
   accounts?: AccountBookmarkEntity[];
+  people?: PersonEntity[];
 }

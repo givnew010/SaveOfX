@@ -10,6 +10,7 @@ import com.example.data.BackupPayload
 import com.example.data.BookmarkRepository
 import com.example.data.FolderEntity
 import com.example.data.FolderWithCount
+import com.example.data.PersonEntity
 import com.example.data.RestoreMode
 import com.example.data.ThemeMode
 import com.example.data.TweetBookmarkEntity
@@ -18,6 +19,7 @@ import com.example.util.AccountFetcher
 import com.example.util.AccountParser
 import com.example.util.ParsedAccount
 import com.example.util.ParsedTweet
+import com.example.util.PersonWorkCodec
 import com.example.util.TweetFetchResult
 import com.example.util.TweetFetcher
 import com.example.util.TweetParser
@@ -34,6 +36,7 @@ import kotlinx.coroutines.launch
 enum class MainTab {
     BOOKMARKS,
     ACCOUNTS,
+    PEOPLE,
     FOLDERS,
     SETTINGS
 }
@@ -54,6 +57,9 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
     private val allAccountsFlow: StateFlow<List<AccountBookmarkEntity>> = repository.allAccounts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val allPeopleFlow: StateFlow<List<PersonEntity>> = repository.allPeople
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _selectedFolderId = MutableStateFlow<Long?>(null)
     val selectedFolderId: StateFlow<Long?> = _selectedFolderId.asStateFlow()
 
@@ -65,6 +71,12 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
 
     private val _showAccountFavoritesOnly = MutableStateFlow(false)
     val showAccountFavoritesOnly: StateFlow<Boolean> = _showAccountFavoritesOnly.asStateFlow()
+
+    private val _selectedPersonFolderId = MutableStateFlow<Long?>(null)
+    val selectedPersonFolderId: StateFlow<Long?> = _selectedPersonFolderId.asStateFlow()
+
+    private val _showPersonFavoritesOnly = MutableStateFlow(false)
+    val showPersonFavoritesOnly: StateFlow<Boolean> = _showPersonFavoritesOnly.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -83,6 +95,10 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val totalAccountsCount: StateFlow<Int> = allAccountsFlow
+        .combine(_searchQuery) { list, _ -> list.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val totalPeopleCount: StateFlow<Int> = allPeopleFlow
         .combine(_searchQuery) { list, _ -> list.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
@@ -122,6 +138,28 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
                 a.bio.lowercase().contains(trimmed) ||
                 (a.userNote?.lowercase()?.contains(trimmed) == true) ||
                 a.tags.lowercase().contains(trimmed)
+            matchFolder && matchFav && matchQuery
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val filteredPeople: StateFlow<List<PersonEntity>> = combine(
+        allPeopleFlow,
+        _selectedPersonFolderId,
+        _showPersonFavoritesOnly,
+        _searchQuery
+    ) { list, folderId, favOnly, query ->
+        val trimmed = query.trim().lowercase()
+        list.filter { p ->
+            val matchFolder = folderId == null || p.folderId == folderId
+            val matchFav = !favOnly || p.isFavorite
+            val worksText = if (trimmed.isEmpty()) "" else p.worksJson.lowercase()
+            val matchQuery = trimmed.isEmpty() ||
+                p.name.lowercase().contains(trimmed) ||
+                p.role.lowercase().contains(trimmed) ||
+                p.bio.lowercase().contains(trimmed) ||
+                (p.userNote?.lowercase()?.contains(trimmed) == true) ||
+                p.tags.lowercase().contains(trimmed) ||
+                worksText.contains(trimmed)
             matchFolder && matchFav && matchQuery
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -176,6 +214,27 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
     private val _pendingAccountTags = MutableStateFlow("")
     val pendingAccountTags: StateFlow<String> = _pendingAccountTags.asStateFlow()
 
+    // Save / Edit Person & Detail Sheets
+    private val _isPersonSheetOpen = MutableStateFlow(false)
+    val isPersonSheetOpen: StateFlow<Boolean> = _isPersonSheetOpen.asStateFlow()
+
+    private val _personToEdit = MutableStateFlow<PersonEntity?>(null)
+    val personToEdit: StateFlow<PersonEntity?> = _personToEdit.asStateFlow()
+
+    private val _pendingPersonFolderId = MutableStateFlow<Long?>(null)
+    val pendingPersonFolderId: StateFlow<Long?> = _pendingPersonFolderId.asStateFlow()
+
+    private val _personDetailTargetId = MutableStateFlow<Long?>(null)
+    val selectedPersonForDetail: StateFlow<PersonEntity?> = combine(
+        allPeopleFlow,
+        _personDetailTargetId
+    ) { list, id ->
+        if (id == null) null else list.firstOrNull { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _personDetailAutoFocusWork = MutableStateFlow(false)
+    val personDetailAutoFocusWork: StateFlow<Boolean> = _personDetailAutoFocusWork.asStateFlow()
+
     // Refreshing cards
     private val _refreshingBookmarkIds = MutableStateFlow<Set<Long>>(emptySet())
     val refreshingBookmarkIds: StateFlow<Set<Long>> = _refreshingBookmarkIds.asStateFlow()
@@ -198,6 +257,9 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
 
     private val _accountToMove = MutableStateFlow<AccountBookmarkEntity?>(null)
     val accountToMove: StateFlow<AccountBookmarkEntity?> = _accountToMove.asStateFlow()
+
+    private val _personToMove = MutableStateFlow<PersonEntity?>(null)
+    val personToMove: StateFlow<PersonEntity?> = _personToMove.asStateFlow()
 
     private val _userFeedbackMessage = MutableStateFlow<String?>(null)
     val userFeedbackMessage: StateFlow<String?> = _userFeedbackMessage.asStateFlow()
@@ -253,6 +315,23 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
         if (next) {
             _selectedAccountFolderId.value = null
             _activeTab.value = MainTab.ACCOUNTS
+        }
+    }
+
+    fun selectPersonFolder(folderId: Long?) {
+        _selectedPersonFolderId.value = folderId
+        if (folderId != null) {
+            _showPersonFavoritesOnly.value = false
+            _activeTab.value = MainTab.PEOPLE
+        }
+    }
+
+    fun togglePersonFavoritesOnly() {
+        val next = !_showPersonFavoritesOnly.value
+        _showPersonFavoritesOnly.value = next
+        if (next) {
+            _selectedPersonFolderId.value = null
+            _activeTab.value = MainTab.PEOPLE
         }
     }
 
@@ -631,6 +710,143 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // People Bottom Sheet, Profile Detail & CRUD
+    fun openAddPersonSheet() {
+        _personToEdit.value = null
+        _pendingPersonFolderId.value = _selectedPersonFolderId.value
+            ?: folders.value.firstOrNull()?.folder?.id
+        _isPersonSheetOpen.value = true
+    }
+
+    fun openEditPersonSheet(person: PersonEntity) {
+        _personToEdit.value = person
+        _pendingPersonFolderId.value = person.folderId
+        _isPersonSheetOpen.value = true
+    }
+
+    fun closePersonSheet() {
+        _isPersonSheetOpen.value = false
+        _personToEdit.value = null
+    }
+
+    fun setPendingPersonFolderId(folderId: Long) {
+        _pendingPersonFolderId.value = folderId
+    }
+
+    fun savePerson(
+        name: String,
+        role: String,
+        avatarUrl: String?,
+        bio: String,
+        userNote: String?,
+        tags: String,
+        folderId: Long
+    ) {
+        val trimmedName = name.trim()
+        if (trimmedName.isEmpty()) return
+        val editing = _personToEdit.value
+
+        viewModelScope.launch {
+            if (editing != null) {
+                repository.updatePerson(
+                    editing.copy(
+                        name = trimmedName,
+                        role = role.trim(),
+                        avatarUrl = avatarUrl?.trim()?.takeIf { it.isNotEmpty() },
+                        bio = bio.trim(),
+                        userNote = userNote?.trim()?.takeIf { it.isNotEmpty() },
+                        tags = tags.trim(),
+                        folderId = folderId
+                    )
+                )
+                closePersonSheet()
+                showFeedback("تم تحديث ملف الشخص بنجاح")
+            } else {
+                val insertedId = repository.insertPerson(
+                    PersonEntity(
+                        folderId = folderId,
+                        name = trimmedName,
+                        role = role.trim(),
+                        avatarUrl = avatarUrl?.trim()?.takeIf { it.isNotEmpty() },
+                        bio = bio.trim(),
+                        userNote = userNote?.trim()?.takeIf { it.isNotEmpty() },
+                        tags = tags.trim(),
+                        worksJson = "[]",
+                        isFavorite = false
+                    )
+                )
+                closePersonSheet()
+                showFeedback("تم حفظ الشخص في المجموعة — يمكنك الآن إضافة أعماله وروابطه")
+                _personDetailAutoFocusWork.value = true
+                _personDetailTargetId.value = insertedId
+            }
+        }
+    }
+
+    fun deletePerson(personId: Long) {
+        viewModelScope.launch {
+            repository.deletePerson(personId)
+            if (_personDetailTargetId.value == personId) {
+                _personDetailTargetId.value = null
+            }
+            showFeedback("تم حذف الشخص من المجموعة")
+        }
+    }
+
+    fun togglePersonFavorite(person: PersonEntity) {
+        viewModelScope.launch {
+            repository.togglePersonFavorite(person.id)
+        }
+    }
+
+    fun openMovePersonDialog(person: PersonEntity) {
+        _personToMove.value = person
+    }
+
+    fun closeMovePersonDialog() {
+        _personToMove.value = null
+    }
+
+    fun movePersonToFolder(newFolderId: Long) {
+        val target = _personToMove.value ?: return
+        viewModelScope.launch {
+            repository.movePerson(target.id, newFolderId)
+            _personToMove.value = null
+            showFeedback("تم نقل الشخص إلى المجموعة الجديدة")
+        }
+    }
+
+    fun openPersonDetail(person: PersonEntity, autoFocusWork: Boolean = false) {
+        _personDetailAutoFocusWork.value = autoFocusWork
+        _personDetailTargetId.value = person.id
+    }
+
+    fun closePersonDetail() {
+        _personDetailTargetId.value = null
+        _personDetailAutoFocusWork.value = false
+    }
+
+    fun addPersonWork(
+        person: PersonEntity,
+        type: String,
+        title: String,
+        url: String,
+        note: String?
+    ) {
+        val work = PersonWorkCodec.createWorkItem(type, title, url, note) ?: return
+        viewModelScope.launch {
+            repository.addWorkToPerson(person, work)
+            showFeedback("تمت إضافة العمل إلى ملف الشخص")
+        }
+    }
+
+    fun removePersonWork(person: PersonEntity, workId: String) {
+        viewModelScope.launch {
+            repository.removeWorkFromPerson(person, workId)
+            showFeedback("تم حذف العنصر من ملف الشخص")
+        }
+    }
+
     fun refreshSingleBookmark(bookmark: TweetBookmarkEntity, silent: Boolean = false) {
         if (!TweetParser.isTweetUrl(bookmark.tweetUrl)) {
             if (!silent) showFeedback("الرابط لا يشير إلى منشور X صالح")
@@ -759,6 +975,7 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
             _showCreateFolderDialog.value = false
             _pendingSelectedFolderId.value = createdId
             _pendingAccountFolderId.value = createdId
+            _pendingPersonFolderId.value = createdId
             showFeedback("تم إنشاء المجموعة بنجاح")
         }
     }
@@ -806,6 +1023,9 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
             if (_selectedAccountFolderId.value == target.folder.id) {
                 _selectedAccountFolderId.value = null
             }
+            if (_selectedPersonFolderId.value == target.folder.id) {
+                _selectedPersonFolderId.value = null
+            }
             _folderToDelete.value = null
             showFeedback("تم حذف المجموعة بنجاح")
         }
@@ -825,10 +1045,12 @@ class BookmarkViewModel(application: Application) : AndroidViewModel(application
             _showFavoritesOnly.value = false
             _selectedAccountFolderId.value = null
             _showAccountFavoritesOnly.value = false
+            _selectedPersonFolderId.value = null
+            _showPersonFavoritesOnly.value = false
             val message = if (mode == RestoreMode.REPLACE) {
-                "تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب بنجاح"
+                "تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب و ${result.peopleAdded} شخص بنجاح"
             } else {
-                "تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية جديدة و ${result.accountsAdded} حساب جديد"
+                "تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية جديدة و ${result.accountsAdded} حساب جديد و ${result.peopleAdded} شخص جديد"
             }
             showFeedback(message)
         }

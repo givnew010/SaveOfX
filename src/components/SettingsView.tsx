@@ -19,6 +19,7 @@ interface SettingsViewProps {
   totalFolders: number;
   totalBookmarks: number;
   totalAccounts: number;
+  totalPeople: number;
   lastBackupAt: string | null;
   isDarkMode: boolean;
   onSetDarkMode: (dark: boolean) => void;
@@ -42,6 +43,7 @@ export function SettingsView({
   totalFolders,
   totalBookmarks,
   totalAccounts,
+  totalPeople,
   lastBackupAt,
   isDarkMode,
   onSetDarkMode,
@@ -169,6 +171,10 @@ export function SettingsView({
               ·
             </span>
             <span>{totalAccounts} حساب</span>
+            <span aria-hidden="true" className="text-[#536471] dark:text-[#8B949E]">
+              ·
+            </span>
+            <span>{totalPeople} شخص</span>
           </div>
           <div className="text-xs text-[#536471] dark:text-[#8B949E]">
             {lastBackupAt
@@ -356,7 +362,7 @@ export function SettingsView({
                   النسخة الاحتياطية جاهزة للاستعادة ({pendingSourceName})
                 </p>
                 <p className="text-xs text-[#536471] dark:text-[#8B949E] mt-1 tabular-nums">
-                  {pendingBackup.folders.length} مجموعات · {pendingBackup.bookmarks.length} علامة مرجعية · {pendingBackup.accounts?.length ?? 0} حساب · تاريخ التصدير: {formatDateTime(pendingBackup.exportedAt)}
+                  {pendingBackup.folders.length} مجموعات · {pendingBackup.bookmarks.length} علامة مرجعية · {pendingBackup.accounts?.length ?? 0} حساب · {pendingBackup.people?.length ?? 0} شخص · تاريخ التصدير: {formatDateTime(pendingBackup.exportedAt)}
                 </p>
               </div>
             </div>

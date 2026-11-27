@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.AccountBookmarkEntity
 import com.example.data.FolderEntity
 import com.example.data.FolderWithCount
+import com.example.data.PersonEntity
 import com.example.data.TweetBookmarkEntity
 import com.example.ui.theme.FavoriteRed
 import com.example.ui.theme.XBlue
@@ -405,10 +406,10 @@ fun DeleteFolderDialog(
             )
         },
         text = {
-            val totalItems = folderItem.count + folderItem.accountsCount
+            val totalItems = folderItem.count + folderItem.accountsCount + folderItem.peopleCount
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "تحتوي هذه المجموعة على ${folderItem.count} علامة مرجعية و ${folderItem.accountsCount} حساب محفوظ.",
+                    text = "تحتوي هذه المجموعة على ${folderItem.count} علامة مرجعية و ${folderItem.accountsCount} حساب و ${folderItem.peopleCount} شخص.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -433,7 +434,7 @@ fun DeleteFolderDialog(
                                 colors = CheckboxDefaults.colors(checkedColor = XBlue)
                             )
                             Text(
-                                text = "نقل العلامات والحسابات إلى المجموعة الافتراضية بدلاً من حذفها",
+                                text = "نقل العلامات والحسابات والأشخاص إلى المجموعة الافتراضية بدلاً من حذفها",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -575,6 +576,100 @@ fun MoveAccountDialog(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "نقل الحساب إلى مجموعة أخرى",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                folders.forEach { item ->
+                    val folder = item.folder
+                    val isSelected = selectedId == folder.id
+                    val color = parseHexColor(folder.colorHex, XBlue)
+
+                    Surface(
+                        onClick = { selectedId = folder.id },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected) color.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = BorderStroke(
+                            width = if (isSelected) 1.5.dp else 1.dp,
+                            color = if (isSelected) color else MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = folder.iconEmoji, fontSize = 18.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = folder.name,
+                                    color = if (isSelected) color else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = color,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirmMove(selectedId) },
+                colors = ButtonDefaults.buttonColors(containerColor = XBlue),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("نقل", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
+                Text("إلغاء")
+            }
+        }
+    )
+}
+
+@Composable
+fun MovePersonDialog(
+    person: PersonEntity,
+    folders: List<FolderWithCount>,
+    onDismiss: () -> Unit,
+    onConfirmMove: (Long) -> Unit
+) {
+    var selectedId by remember(person.id) { mutableStateOf(person.folderId) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.DriveFileMove,
+                    contentDescription = null,
+                    tint = XBlue
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "نقل الشخص إلى مجموعة أخرى",
                     style = MaterialTheme.typography.titleMedium
                 )
             }

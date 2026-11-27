@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.util.PersonWorkCodec
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.text.SimpleDateFormat
@@ -11,9 +12,11 @@ data class RestorePlan(
     val foldersToSave: List<FolderEntity>,
     val bookmarksToSave: List<TweetBookmarkEntity>,
     val accountsToSave: List<AccountBookmarkEntity>,
+    val peopleToSave: List<PersonEntity>,
     val foldersAddedCount: Int,
     val bookmarksAddedCount: Int,
     val accountsAddedCount: Int,
+    val peopleAddedCount: Int,
     val isReplace: Boolean
 )
 
@@ -35,15 +38,17 @@ object BackupManager {
         folders: List<FolderEntity>,
         bookmarks: List<TweetBookmarkEntity>,
         accounts: List<AccountBookmarkEntity> = emptyList(),
+        people: List<PersonEntity> = emptyList(),
         exportedAt: String = nowIsoTimestamp()
     ): BackupPayload {
         return BackupPayload(
             app = "X Folders",
-            version = 2,
+            version = 3,
             exportedAt = exportedAt,
             folders = folders,
             bookmarks = bookmarks,
-            accounts = accounts
+            accounts = accounts,
+            people = people
         )
     }
 
@@ -62,6 +67,7 @@ object BackupManager {
         val rawFolders = raw.folders ?: return null
         val rawBookmarks = raw.bookmarks ?: return null
         val rawAccounts = raw.accounts.orEmpty()
+        val rawPeople = raw.people.orEmpty()
         val now = System.currentTimeMillis()
 
         val validFolders = mutableListOf<FolderEntity>()
@@ -148,15 +154,49 @@ object BackupManager {
             )
         }
 
-        if (validFolders.isEmpty() && validBookmarks.isEmpty() && validAccounts.isEmpty()) return null
+        val validPeople = mutableListOf<PersonEntity>()
+        for (item in rawPeople) {
+            val name = item.name?.trim().orEmpty()
+            if (name.isEmpty()) continue
+            val candidateId = item.id?.takeIf { it > 0L } ?: (validPeople.size + 1L)
+            val resolvedWorksJson = when {
+                !item.worksJson.isNullOrBlank() -> item.worksJson
+                !item.works.isNullOrEmpty() -> PersonWorkCodec.serializeWorks(item.works)
+                else -> "[]"
+            }
+            validPeople.add(
+                PersonEntity(
+                    id = candidateId,
+                    folderId = item.folderId?.takeIf { it > 0L } ?: 1L,
+                    name = name,
+                    role = item.role?.trim().orEmpty(),
+                    avatarUrl = item.avatarUrl?.trim()?.takeIf { it.isNotEmpty() },
+                    bio = item.bio.orEmpty(),
+                    userNote = item.userNote?.trim()?.takeIf { it.isNotEmpty() },
+                    tags = item.tags.orEmpty(),
+                    worksJson = resolvedWorksJson,
+                    isFavorite = item.isFavorite ?: false,
+                    savedAt = item.savedAt ?: now
+                )
+            )
+        }
+
+        if (validFolders.isEmpty() &&
+            validBookmarks.isEmpty() &&
+            validAccounts.isEmpty() &&
+            validPeople.isEmpty()
+        ) {
+            return null
+        }
 
         return BackupPayload(
             app = raw.app?.takeIf { it.isNotBlank() } ?: "X Folders",
-            version = raw.version ?: 2,
+            version = raw.version ?: 3,
             exportedAt = raw.exportedAt?.takeIf { it.isNotBlank() } ?: nowIsoTimestamp(),
             folders = validFolders,
             bookmarks = validBookmarks,
-            accounts = validAccounts
+            accounts = validAccounts,
+            people = validPeople
         )
     }
 
@@ -165,7 +205,8 @@ object BackupManager {
         mode: RestoreMode,
         existingFolders: List<FolderEntity>,
         existingBookmarks: List<TweetBookmarkEntity>,
-        existingAccounts: List<AccountBookmarkEntity> = emptyList()
+        existingAccounts: List<AccountBookmarkEntity> = emptyList(),
+        existingPeople: List<PersonEntity> = emptyList()
     ): RestorePlan {
         if (mode == RestoreMode.REPLACE) {
             var maxFolderId = payload.folders.maxOfOrNull { it.id } ?: 0L
@@ -223,13 +264,24 @@ object BackupManager {
                 )
             }
 
+            val normalizedPeople = payload.people.mapIndexed { index, person ->
+                val mappedFolderId = folderIdMap[person.folderId] ?: person.folderId
+                val finalFolderId = if (mappedFolderId in validFolderIds) mappedFolderId else defaultFolderId
+                person.copy(
+                    id = index + 1L,
+                    folderId = finalFolderId
+                )
+            }
+
             return RestorePlan(
                 foldersToSave = normalizedFolders,
                 bookmarksToSave = normalizedBookmarks,
                 accountsToSave = normalizedAccounts,
+                peopleToSave = normalizedPeople,
                 foldersAddedCount = normalizedFolders.size,
                 bookmarksAddedCount = normalizedBookmarks.size,
                 accountsAddedCount = normalizedAccounts.size,
+                peopleAddedCount = normalizedPeople.size,
                 isReplace = true
             )
         }
@@ -299,13 +351,34 @@ object BackupManager {
             )
         }
 
+        val existingPersonKeySet = existingPeople
+            .map { PersonWorkCodec.buildDedupeKey(it.name, it.role) }
+            .toMutableSet()
+        var nextPersonId = (existingPeople.maxOfOrNull { it.id } ?: 0L) + 1L
+        val newPeopleToInsert = mutableListOf<PersonEntity>()
+
+        for (incoming in payload.people) {
+            val key = PersonWorkCodec.buildDedupeKey(incoming.name, incoming.role)
+            if (key in existingPersonKeySet) continue
+            existingPersonKeySet.add(key)
+            val targetFolderId = folderIdMap[incoming.folderId] ?: defaultFolderId
+            newPeopleToInsert.add(
+                incoming.copy(
+                    id = nextPersonId++,
+                    folderId = targetFolderId
+                )
+            )
+        }
+
         return RestorePlan(
             foldersToSave = newFoldersToInsert,
             bookmarksToSave = newBookmarksToInsert,
             accountsToSave = newAccountsToInsert,
+            peopleToSave = newPeopleToInsert,
             foldersAddedCount = newFoldersToInsert.size,
             bookmarksAddedCount = newBookmarksToInsert.size,
             accountsAddedCount = newAccountsToInsert.size,
+            peopleAddedCount = newPeopleToInsert.size,
             isReplace = false
         )
     }

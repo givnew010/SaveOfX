@@ -5,6 +5,7 @@ import type {
   AccountBookmarkEntity,
   FolderEntity,
   FolderWithCount,
+  PersonEntity,
   TweetBookmarkEntity,
 } from '../types/bookmark';
 
@@ -358,10 +359,10 @@ export function DeleteFolderDialog({
       </div>
 
       <p className="text-sm text-[#536471] dark:text-[#8B949E] text-center mb-4">
-        تحتوي هذه المجموعة على {folderItem.count} علامة مرجعية و {folderItem.accountCount} حساب محفوظ.
+        تحتوي هذه المجموعة على {folderItem.count} علامة مرجعية و {folderItem.accountCount} حساب و {folderItem.peopleCount} شخص.
       </p>
 
-      {(folderItem.count > 0 || folderItem.accountCount > 0) && (
+      {(folderItem.count > 0 || folderItem.accountCount > 0 || folderItem.peopleCount > 0) && (
         <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#EFF3F4]/60 dark:bg-[#21262D]/60 cursor-pointer mb-4">
           <input
             type="checkbox"
@@ -496,6 +497,85 @@ export function MoveAccountDialog({
           className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]"
         >
           نقل الحساب إلى مجموعة أخرى
+        </h2>
+      </div>
+
+      <div className="space-y-2 max-h-72 overflow-y-auto">
+        {folders.map(({ folder }) => {
+          const isSelected = selectedId === folder.id;
+          const color = folder.colorHex || '#1D9BF0';
+          return (
+            <button
+              key={folder.id}
+              type="button"
+              onClick={() => setSelectedId(folder.id)}
+              style={
+                isSelected
+                  ? {
+                      backgroundColor: `${color}22`,
+                      borderColor: color,
+                      color,
+                    }
+                  : undefined
+              }
+              className={`w-full min-h-[46px] px-3 py-2.5 rounded-xl flex items-center justify-between transition-colors ${
+                isSelected
+                  ? 'border-[1.5px] font-bold'
+                  : 'border border-[#E2E8F0] dark:border-[#30363D] bg-[#EFF3F4]/40 dark:bg-[#21262D]/40 text-[#0F1419] dark:text-[#F0F6FC] hover:bg-[#EFF3F4] dark:hover:bg-[#21262D]'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{folder.iconEmoji}</span>
+                <span className="text-sm">{folder.name}</span>
+              </div>
+              {isSelected && <Check className="w-4 h-4 shrink-0" />}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="min-h-[42px] px-4 py-2 rounded-xl border border-[#CFD9DE] dark:border-[#30363D] text-sm font-medium text-[#0F1419] dark:text-[#F0F6FC] hover:bg-[#EFF3F4] dark:hover:bg-[#21262D] transition-colors"
+        >
+          إلغاء
+        </button>
+        <button
+          type="button"
+          onClick={() => onConfirmMove(selectedId)}
+          className="min-h-[42px] px-5 py-2 rounded-xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white text-sm font-bold transition-colors"
+        >
+          نقل
+        </button>
+      </div>
+    </ModalBackdrop>
+  );
+}
+
+export function MovePersonDialog({
+  person,
+  folders,
+  onDismiss,
+  onConfirmMove,
+}: {
+  person: PersonEntity;
+  folders: FolderWithCount[];
+  onDismiss: () => void;
+  onConfirmMove: (newFolderId: number) => void;
+}) {
+  const [selectedId, setSelectedId] = useState(person.folderId);
+
+  return (
+    <ModalBackdrop onDismiss={onDismiss} titleId="move-person-title">
+      <div className="flex items-center gap-2 mb-4">
+        <FolderInput className="w-5 h-5 text-[#1D9BF0]" />
+        <h2
+          id="move-person-title"
+          className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]"
+        >
+          نقل الشخص إلى مجموعة أخرى
         </h2>
       </div>
 

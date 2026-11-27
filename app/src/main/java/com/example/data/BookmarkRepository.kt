@@ -2,6 +2,8 @@ package com.example.data
 
 import android.content.Context
 import androidx.room.withTransaction
+import com.example.util.PersonWorkCodec
+import com.example.util.PersonWorkItem
 import kotlinx.coroutines.flow.Flow
 
 class BookmarkRepository(
@@ -11,6 +13,7 @@ class BookmarkRepository(
     private val folderDao = database.folderDao()
     private val bookmarkDao = database.bookmarkDao()
     private val accountDao = database.accountDao()
+    private val personDao = database.personDao()
     private val prefs by lazy {
         context.applicationContext.getSharedPreferences("xfolders_prefs", Context.MODE_PRIVATE)
     }
@@ -18,6 +21,7 @@ class BookmarkRepository(
     val foldersWithCount: Flow<List<FolderWithCount>> = folderDao.observeFoldersWithCount()
     val allBookmarks: Flow<List<TweetBookmarkEntity>> = bookmarkDao.observeAllBookmarks()
     val allAccounts: Flow<List<AccountBookmarkEntity>> = accountDao.observeAllAccounts()
+    val allPeople: Flow<List<PersonEntity>> = personDao.observeAllPeople()
 
     fun getThemeMode(): ThemeMode {
         return ThemeMode.fromKey(prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.key))
@@ -223,6 +227,78 @@ class BookmarkRepository(
         } else if (accountDao.getAccountsCount() > 0 && !alreadySeededAccounts) {
             prefs.edit().putBoolean(KEY_ACCOUNTS_SEEDED, true).apply()
         }
+
+        val alreadySeededPeople = prefs.getBoolean(KEY_PEOPLE_SEEDED, false)
+        if (!alreadySeededPeople && personDao.getPeopleCount() == 0) {
+            val allFolders = folderDao.getAllFoldersOnce()
+            val defaultId = seededDefaultId
+                ?: allFolders.firstOrNull { it.isDefault }?.id
+                ?: allFolders.firstOrNull()?.id
+                ?: return
+            val ideasFolderId = seededIdeasId
+                ?: allFolders.firstOrNull { it.name.contains("أفكار") }?.id
+                ?: defaultId
+
+            personDao.insertPeople(
+                listOf(
+                    PersonEntity(
+                        folderId = ideasFolderId,
+                        name = "كريستوفر نولان",
+                        role = "مخرج وكاتب سيناريو",
+                        bio = "مخرج بريطاني أمريكي اشتهر بأفلامه ذات السرد غير الخطي والمؤثرات العملية مثل Inception و Interstellar و Oppenheimer.",
+                        userNote = "مرجع لأفضل الأعمال السينمائية والمقابلات الإخراجية",
+                        tags = "سينما,إخراج,أفلام",
+                        worksJson = PersonWorkCodec.serializeWorks(
+                            listOf(
+                                PersonWorkItem(
+                                    id = "seed_work_1",
+                                    type = "link",
+                                    title = "صفحة الأعمال على IMDb",
+                                    url = "https://www.imdb.com/name/nm0634240/",
+                                    note = "قائمة الأفلام والجوائز كاملة",
+                                    addedAt = now - 900L
+                                ),
+                                PersonWorkItem(
+                                    id = "seed_work_2",
+                                    type = "video",
+                                    title = "مقابلة حول صناعة Interstellar",
+                                    url = "https://www.youtube.com/watch?v=zSWdZVtXT7E",
+                                    note = "مقطع تعريفي بالعمل",
+                                    addedAt = now - 800L
+                                )
+                            )
+                        ),
+                        isFavorite = true,
+                        savedAt = now - 1000L
+                    ),
+                    PersonEntity(
+                        folderId = ideasFolderId,
+                        name = "أحمد حلمي",
+                        role = "ممثل ومنتج",
+                        bio = "ممثل مصري بارز قدم العديد من الأعمال الكوميدية والدرامية الناجحة في السينما العربية.",
+                        userNote = "متابعة أحدث الأفلام والمشاريع الفنية",
+                        tags = "ممثل,سينما_عربية,كوميديا",
+                        worksJson = PersonWorkCodec.serializeWorks(
+                            listOf(
+                                PersonWorkItem(
+                                    id = "seed_work_3",
+                                    type = "link",
+                                    title = "السيرة والأعمال الكاملة",
+                                    url = "https://elcinema.com/person/1039784/",
+                                    note = "بيانات الأفلام والمسلسلات",
+                                    addedAt = now - 1900L
+                                )
+                            )
+                        ),
+                        isFavorite = false,
+                        savedAt = now - 2000L
+                    )
+                )
+            )
+            prefs.edit().putBoolean(KEY_PEOPLE_SEEDED, true).apply()
+        } else if (personDao.getPeopleCount() > 0 && !alreadySeededPeople) {
+            prefs.edit().putBoolean(KEY_PEOPLE_SEEDED, true).apply()
+        }
     }
 
     suspend fun insertFolder(folder: FolderEntity): Long = folderDao.insertFolder(folder)
@@ -235,10 +311,12 @@ class BookmarkRepository(
             if (defaultFolder != null && defaultFolder.id != folderId) {
                 bookmarkDao.moveAllBookmarksBetweenFolders(folderId, defaultFolder.id)
                 accountDao.moveAllAccountsBetweenFolders(folderId, defaultFolder.id)
+                personDao.moveAllPeopleBetweenFolders(folderId, defaultFolder.id)
             }
         } else {
             bookmarkDao.deleteBookmarksByFolder(folderId)
             accountDao.deleteAccountsByFolder(folderId)
+            personDao.deletePeopleByFolder(folderId)
         }
         folderDao.deleteFolderById(folderId)
     }
@@ -269,11 +347,38 @@ class BookmarkRepository(
     suspend fun moveAccount(accountId: Long, newFolderId: Long) =
         accountDao.moveAccount(accountId, newFolderId)
 
+    suspend fun insertPerson(person: PersonEntity): Long {
+        prefs.edit().putBoolean(KEY_PEOPLE_SEEDED, true).apply()
+        return personDao.insertPerson(person)
+    }
+
+    suspend fun updatePerson(person: PersonEntity) = personDao.updatePerson(person)
+
+    suspend fun deletePerson(personId: Long) = personDao.deletePersonById(personId)
+
+    suspend fun togglePersonFavorite(personId: Long) = personDao.toggleFavorite(personId)
+
+    suspend fun movePerson(personId: Long, newFolderId: Long) =
+        personDao.movePerson(personId, newFolderId)
+
+    suspend fun addWorkToPerson(person: PersonEntity, work: PersonWorkItem) {
+        val currentWorks = PersonWorkCodec.parseWorks(person.worksJson)
+        val updatedWorks = listOf(work) + currentWorks
+        personDao.updatePerson(person.copy(worksJson = PersonWorkCodec.serializeWorks(updatedWorks)))
+    }
+
+    suspend fun removeWorkFromPerson(person: PersonEntity, workId: String) {
+        val currentWorks = PersonWorkCodec.parseWorks(person.worksJson)
+        val updatedWorks = currentWorks.filterNot { it.id == workId }
+        personDao.updatePerson(person.copy(worksJson = PersonWorkCodec.serializeWorks(updatedWorks)))
+    }
+
     suspend fun exportBackup(): BackupPayload {
         val folders = folderDao.getAllFoldersOnce()
         val bookmarks = bookmarkDao.getAllBookmarksOnce()
         val accounts = accountDao.getAllAccountsOnce()
-        return BackupManager.buildPayload(folders, bookmarks, accounts)
+        val people = personDao.getAllPeopleOnce()
+        return BackupManager.buildPayload(folders, bookmarks, accounts, people)
     }
 
     suspend fun restoreBackup(payload: BackupPayload, mode: RestoreMode): RestoreSummary {
@@ -281,21 +386,26 @@ class BookmarkRepository(
             val existingFolders = folderDao.getAllFoldersOnce()
             val existingBookmarks = bookmarkDao.getAllBookmarksOnce()
             val existingAccounts = accountDao.getAllAccountsOnce()
+            val existingPeople = personDao.getAllPeopleOnce()
             val plan = BackupManager.planRestore(
                 payload = payload,
                 mode = mode,
                 existingFolders = existingFolders,
                 existingBookmarks = existingBookmarks,
-                existingAccounts = existingAccounts
+                existingAccounts = existingAccounts,
+                existingPeople = existingPeople
             )
 
             if (plan.isReplace) {
+                personDao.deleteAllPeople()
                 accountDao.deleteAllAccounts()
                 bookmarkDao.deleteAllBookmarks()
                 folderDao.deleteAllFolders()
                 folderDao.insertFolders(plan.foldersToSave)
                 bookmarkDao.insertBookmarks(plan.bookmarksToSave)
                 accountDao.insertAccounts(plan.accountsToSave)
+                personDao.insertPeople(plan.peopleToSave)
+                prefs.edit().putBoolean(KEY_PEOPLE_SEEDED, true).apply()
             } else {
                 if (plan.foldersToSave.isNotEmpty()) {
                     folderDao.insertFolders(plan.foldersToSave)
@@ -306,12 +416,17 @@ class BookmarkRepository(
                 if (plan.accountsToSave.isNotEmpty()) {
                     accountDao.insertAccounts(plan.accountsToSave)
                 }
+                if (plan.peopleToSave.isNotEmpty()) {
+                    personDao.insertPeople(plan.peopleToSave)
+                    prefs.edit().putBoolean(KEY_PEOPLE_SEEDED, true).apply()
+                }
             }
 
             RestoreSummary(
                 foldersAdded = plan.foldersAddedCount,
                 bookmarksAdded = plan.bookmarksAddedCount,
-                accountsAdded = plan.accountsAddedCount
+                accountsAdded = plan.accountsAddedCount,
+                peopleAdded = plan.peopleAddedCount
             )
         }
     }
@@ -320,5 +435,6 @@ class BookmarkRepository(
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_LAST_BACKUP_AT = "last_backup_at"
         private const val KEY_ACCOUNTS_SEEDED = "accounts_seeded"
+        private const val KEY_PEOPLE_SEEDED = "people_seeded"
     }
 }

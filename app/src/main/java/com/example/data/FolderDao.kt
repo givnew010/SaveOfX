@@ -14,7 +14,8 @@ interface FolderDao {
         """
         SELECT f.*,
                (SELECT COUNT(*) FROM bookmarks b WHERE b.folderId = f.id) AS count,
-               (SELECT COUNT(*) FROM accounts a WHERE a.folderId = f.id) AS accountsCount
+               (SELECT COUNT(*) FROM accounts a WHERE a.folderId = f.id) AS accountsCount,
+               (SELECT COUNT(*) FROM people p WHERE p.folderId = f.id) AS peopleCount
         FROM folders f
         ORDER BY f.isDefault DESC, f.createdAt ASC
         """

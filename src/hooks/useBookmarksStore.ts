@@ -8,10 +8,13 @@ import type {
   MainTab,
   ParsedAccount,
   ParsedTweet,
+  PersonEntity,
+  PersonWorkType,
   TweetBookmarkEntity,
 } from '../types/bookmark';
 import { AccountFetcher } from '../utils/accountFetcher';
 import { AccountParser } from '../utils/accountParser';
+import { createPersonWorkItem, normalizePersonInput } from '../utils/personUtils';
 import { TweetFetcher } from '../utils/tweetFetcher';
 import { TweetParser } from '../utils/tweetParser';
 
@@ -19,12 +22,16 @@ export function useBookmarksStore() {
   const [folders, setFolders] = useState<FolderEntity[]>([]);
   const [bookmarks, setBookmarks] = useState<TweetBookmarkEntity[]>([]);
   const [accounts, setAccounts] = useState<AccountBookmarkEntity[]>([]);
+  const [people, setPeople] = useState<PersonEntity[]>([]);
 
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   const [selectedAccountFolderId, setSelectedAccountFolderId] = useState<number | null>(null);
   const [showAccountFavoritesOnly, setShowAccountFavoritesOnly] = useState(false);
+
+  const [selectedPersonFolderId, setSelectedPersonFolderId] = useState<number | null>(null);
+  const [showPersonFavoritesOnly, setShowPersonFavoritesOnly] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<MainTab>('BOOKMARKS');
@@ -53,12 +60,20 @@ export function useBookmarksStore() {
   const [refreshingBookmarkIds, setRefreshingBookmarkIds] = useState<Set<number>>(new Set());
   const [refreshingAccountIds, setRefreshingAccountIds] = useState<Set<number>>(new Set());
 
+  // Save / Edit Person Sheet state
+  const [isPersonSheetOpen, setIsPersonSheetOpen] = useState(false);
+  const [personToEdit, setPersonToEdit] = useState<PersonEntity | null>(null);
+  const [pendingPersonFolderId, setPendingPersonFolderId] = useState<number | null>(null);
+  const [personDetailTargetId, setPersonDetailTargetId] = useState<number | null>(null);
+  const [personDetailAutoFocusWork, setPersonDetailAutoFocusWork] = useState(false);
+
   // Dialogs
   const [showCreateFolderDialog, setShowCreateFolderDialog] = useState(false);
   const [folderToEdit, setFolderToEdit] = useState<FolderEntity | null>(null);
   const [folderToDelete, setFolderToDelete] = useState<FolderWithCount | null>(null);
   const [bookmarkToMove, setBookmarkToMove] = useState<TweetBookmarkEntity | null>(null);
   const [accountToMove, setAccountToMove] = useState<AccountBookmarkEntity | null>(null);
+  const [personToMove, setPersonToMove] = useState<PersonEntity | null>(null);
   const [userFeedbackMessage, setUserFeedbackMessage] = useState<string | null>(null);
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(() =>
     BookmarkRepository.getLastBackupAt()
@@ -73,6 +88,7 @@ export function useBookmarksStore() {
     setFolders(BookmarkRepository.getAllFolders());
     setBookmarks(BookmarkRepository.getAllBookmarks());
     setAccounts(BookmarkRepository.getAllAccounts());
+    setPeople(BookmarkRepository.getAllPeople());
   }, []);
 
   const showFeedback = useCallback((message: string) => {
@@ -307,6 +323,7 @@ export function useBookmarksStore() {
     setFolders(seeded.folders);
     setBookmarks(seeded.bookmarks);
     setAccounts(seeded.accounts);
+    setPeople(seeded.people);
     void refreshPendingBookmarks();
 
     const params = new URLSearchParams(window.location.search);
@@ -318,8 +335,8 @@ export function useBookmarksStore() {
   }, []);
 
   const foldersWithCount = useMemo(
-    () => BookmarkRepository.getFoldersWithCount(folders, bookmarks, accounts),
-    [folders, bookmarks, accounts]
+    () => BookmarkRepository.getFoldersWithCount(folders, bookmarks, accounts, people),
+    [folders, bookmarks, accounts, people]
   );
 
   const filteredBookmarks = useMemo(() => {
@@ -354,11 +371,41 @@ export function useBookmarksStore() {
     });
   }, [accounts, selectedAccountFolderId, showAccountFavoritesOnly, searchQuery]);
 
+  const filteredPeople = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return people.filter((p) => {
+      const matchFolder = selectedPersonFolderId === null || p.folderId === selectedPersonFolderId;
+      const matchFav = !showPersonFavoritesOnly || p.isFavorite;
+      const matchQuery =
+        query.length === 0 ||
+        p.name.toLowerCase().includes(query) ||
+        p.role.toLowerCase().includes(query) ||
+        p.bio.toLowerCase().includes(query) ||
+        (p.userNote?.toLowerCase().includes(query) ?? false) ||
+        p.tags.toLowerCase().includes(query) ||
+        p.works.some(
+          (w) =>
+            w.title.toLowerCase().includes(query) ||
+            w.url.toLowerCase().includes(query) ||
+            (w.note?.toLowerCase().includes(query) ?? false)
+        );
+      return matchFolder && matchFav && matchQuery;
+    });
+  }, [people, selectedPersonFolderId, showPersonFavoritesOnly, searchQuery]);
+
+  const personDetailTarget = useMemo(
+    () => people.find((p) => p.id === personDetailTargetId) ?? null,
+    [people, personDetailTargetId]
+  );
+
   const effectivePendingFolderId =
     pendingSelectedFolderId ?? foldersWithCount[0]?.folder.id ?? null;
 
   const effectivePendingAccountFolderId =
     pendingAccountFolderId ?? foldersWithCount[0]?.folder.id ?? null;
+
+  const effectivePendingPersonFolderId =
+    pendingPersonFolderId ?? foldersWithCount[0]?.folder.id ?? null;
 
   const selectFolder = useCallback((folderId: number | null) => {
     setSelectedFolderId(folderId);
@@ -393,6 +440,25 @@ export function useBookmarksStore() {
       if (next) {
         setSelectedAccountFolderId(null);
         setActiveTab('ACCOUNTS');
+      }
+      return next;
+    });
+  }, []);
+
+  const selectPersonFolder = useCallback((folderId: number | null) => {
+    setSelectedPersonFolderId(folderId);
+    if (folderId !== null) {
+      setShowPersonFavoritesOnly(false);
+      setActiveTab('PEOPLE');
+    }
+  }, []);
+
+  const togglePersonFavoritesOnly = useCallback(() => {
+    setShowPersonFavoritesOnly((prev) => {
+      const next = !prev;
+      if (next) {
+        setSelectedPersonFolderId(null);
+        setActiveTab('PEOPLE');
       }
       return next;
     });
@@ -672,6 +738,148 @@ export function useBookmarksStore() {
     [reloadFromRepo, showFeedback]
   );
 
+  // People Actions
+  const openAddPersonSheet = useCallback(() => {
+    setPersonToEdit(null);
+    setPendingPersonFolderId(selectedPersonFolderId ?? foldersWithCount[0]?.folder.id ?? 1);
+    setIsPersonSheetOpen(true);
+  }, [selectedPersonFolderId, foldersWithCount]);
+
+  const openEditPersonSheet = useCallback((person: PersonEntity) => {
+    setPersonToEdit(person);
+    setPendingPersonFolderId(person.folderId);
+    setIsPersonSheetOpen(true);
+  }, []);
+
+  const closePersonSheet = useCallback(() => {
+    setIsPersonSheetOpen(false);
+    setPersonToEdit(null);
+  }, []);
+
+  const savePerson = useCallback(
+    (draft: {
+      name: string;
+      role: string;
+      avatarUrl?: string;
+      bio: string;
+      userNote?: string;
+      tags: string;
+      folderId: number;
+    }): PersonEntity | null => {
+      const normalized = normalizePersonInput(draft);
+      if (!normalized) {
+        showFeedback('يرجى إدخال اسم الشخص');
+        return null;
+      }
+
+      if (personToEdit) {
+        const updated: PersonEntity = {
+          ...personToEdit,
+          folderId: draft.folderId,
+          name: normalized.name,
+          role: normalized.role,
+          avatarUrl: normalized.avatarUrl,
+          bio: normalized.bio,
+          userNote: normalized.userNote,
+          tags: normalized.tags,
+        };
+        BookmarkRepository.updatePerson(updated);
+        reloadFromRepo();
+        closePersonSheet();
+        showFeedback('تم تحديث بيانات الشخص بنجاح');
+        return updated;
+      }
+
+      const created = BookmarkRepository.insertPerson({
+        folderId: draft.folderId,
+        name: normalized.name,
+        role: normalized.role,
+        avatarUrl: normalized.avatarUrl,
+        bio: normalized.bio,
+        userNote: normalized.userNote,
+        tags: normalized.tags,
+        works: [],
+        isFavorite: false,
+      });
+      reloadFromRepo();
+      closePersonSheet();
+      showFeedback('تم حفظ الشخص في المجموعة — يمكنك الآن إضافة أعماله وروابطه');
+      setPersonDetailAutoFocusWork(true);
+      setPersonDetailTargetId(created.id);
+      return created;
+    },
+    [personToEdit, reloadFromRepo, closePersonSheet, showFeedback]
+  );
+
+  const deletePerson = useCallback(
+    (personId: number) => {
+      BookmarkRepository.deletePerson(personId);
+      if (personDetailTargetId === personId) {
+        setPersonDetailTargetId(null);
+      }
+      reloadFromRepo();
+      showFeedback('تم حذف ملف الشخص');
+    },
+    [personDetailTargetId, reloadFromRepo, showFeedback]
+  );
+
+  const togglePersonFavorite = useCallback(
+    (person: PersonEntity) => {
+      BookmarkRepository.togglePersonFavorite(person.id);
+      reloadFromRepo();
+    },
+    [reloadFromRepo]
+  );
+
+  const movePersonToFolder = useCallback(
+    (newFolderId: number) => {
+      if (!personToMove) return;
+      BookmarkRepository.movePerson(personToMove.id, newFolderId);
+      reloadFromRepo();
+      setPersonToMove(null);
+      showFeedback('تم نقل الشخص إلى المجموعة الجديدة');
+    },
+    [personToMove, reloadFromRepo, showFeedback]
+  );
+
+  const openPersonDetail = useCallback((person: PersonEntity, autoFocusAddWork = false) => {
+    setPersonDetailTargetId(person.id);
+    setPersonDetailAutoFocusWork(autoFocusAddWork);
+  }, []);
+
+  const closePersonDetail = useCallback(() => {
+    setPersonDetailTargetId(null);
+    setPersonDetailAutoFocusWork(false);
+  }, []);
+
+  const addPersonWork = useCallback(
+    (
+      personId: number,
+      draft: { type: PersonWorkType; title: string; url: string; note?: string }
+    ): boolean => {
+      const workItem = createPersonWorkItem(draft);
+      if (!workItem) {
+        showFeedback('يرجى إدخال رابط أو اختيار صورة صالحة');
+        return false;
+      }
+      const updated = BookmarkRepository.addWorkToPerson(personId, workItem);
+      if (!updated) return false;
+      reloadFromRepo();
+      showFeedback('تمت إضافة العمل إلى ملف الشخص بنجاح');
+      return true;
+    },
+    [reloadFromRepo, showFeedback]
+  );
+
+  const removePersonWork = useCallback(
+    (personId: number, workId: string) => {
+      BookmarkRepository.removeWorkFromPerson(personId, workId);
+      reloadFromRepo();
+      showFeedback('تم حذف العنصر من ملف الشخص');
+    },
+    [reloadFromRepo, showFeedback]
+  );
+
   const createFolder = useCallback(
     (name: string, emoji: string, colorHex: string, description: string) => {
       if (!name.trim()) return;
@@ -686,6 +894,7 @@ export function useBookmarksStore() {
       setShowCreateFolderDialog(false);
       setPendingSelectedFolderId(created.id);
       setPendingAccountFolderId(created.id);
+      setPendingPersonFolderId(created.id);
       showFeedback('تم إنشاء المجموعة بنجاح');
     },
     [reloadFromRepo, showFeedback]
@@ -724,11 +933,21 @@ export function useBookmarksStore() {
       if (selectedAccountFolderId === folderToDelete.folder.id) {
         setSelectedAccountFolderId(null);
       }
+      if (selectedPersonFolderId === folderToDelete.folder.id) {
+        setSelectedPersonFolderId(null);
+      }
       reloadFromRepo();
       setFolderToDelete(null);
       showFeedback('تم حذف المجموعة بنجاح');
     },
-    [folderToDelete, selectedFolderId, selectedAccountFolderId, reloadFromRepo, showFeedback]
+    [
+      folderToDelete,
+      selectedFolderId,
+      selectedAccountFolderId,
+      selectedPersonFolderId,
+      reloadFromRepo,
+      showFeedback,
+    ]
   );
 
   const exportBackupData = useCallback((): BackupPayload => {
@@ -746,13 +965,16 @@ export function useBookmarksStore() {
       setShowFavoritesOnly(false);
       setSelectedAccountFolderId(null);
       setShowAccountFavoritesOnly(false);
+      setSelectedPersonFolderId(null);
+      setShowPersonFavoritesOnly(false);
+      setPersonDetailTargetId(null);
       if (mode === 'replace') {
         showFeedback(
-          `تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب بنجاح`
+          `تمت استعادة ${result.foldersAdded} مجموعة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب و ${result.peopleAdded} شخص بنجاح`
         );
       } else {
         showFeedback(
-          `تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب`
+          `تم دمج ${result.foldersAdded} مجموعة جديدة و ${result.bookmarksAdded} علامة مرجعية و ${result.accountsAdded} حساب و ${result.peopleAdded} شخص`
         );
       }
       return result;
@@ -764,12 +986,16 @@ export function useBookmarksStore() {
     folders: foldersWithCount,
     bookmarks: filteredBookmarks,
     accounts: filteredAccounts,
+    people: filteredPeople,
     totalBookmarksCount: bookmarks.length,
     totalAccountsCount: accounts.length,
+    totalPeopleCount: people.length,
     selectedFolderId,
     showFavoritesOnly,
     selectedAccountFolderId,
     showAccountFavoritesOnly,
+    selectedPersonFolderId,
+    showPersonFavoritesOnly,
     searchQuery,
     activeTab,
     isSaveSheetOpen,
@@ -788,6 +1014,11 @@ export function useBookmarksStore() {
     pendingAccountFolderId: effectivePendingAccountFolderId,
     pendingAccountNote,
     pendingAccountTags,
+    isPersonSheetOpen,
+    personToEdit,
+    pendingPersonFolderId: effectivePendingPersonFolderId,
+    personDetailTarget,
+    personDetailAutoFocusWork,
     refreshingBookmarkIds,
     refreshingAccountIds,
     showCreateFolderDialog,
@@ -795,6 +1026,7 @@ export function useBookmarksStore() {
     folderToDelete,
     bookmarkToMove,
     accountToMove,
+    personToMove,
     userFeedbackMessage,
     lastBackupAt,
     setActiveTab,
@@ -802,6 +1034,8 @@ export function useBookmarksStore() {
     toggleFavoritesOnly,
     selectAccountFolder,
     toggleAccountFavoritesOnly,
+    selectPersonFolder,
+    togglePersonFavoritesOnly,
     setSearchQuery,
     onReceiveSharedText,
     openManualAddSheet,
@@ -818,6 +1052,20 @@ export function useBookmarksStore() {
     setPendingAccountNote,
     setPendingAccountTags,
     savePendingAccount,
+    openAddPersonSheet,
+    openEditPersonSheet,
+    closePersonSheet,
+    setPendingPersonFolderId,
+    savePerson,
+    deletePerson,
+    togglePersonFavorite,
+    openMovePersonDialog: setPersonToMove,
+    closeMovePersonDialog: () => setPersonToMove(null),
+    movePersonToFolder,
+    openPersonDetail,
+    closePersonDetail,
+    addPersonWork,
+    removePersonWork,
     refreshSingleBookmark,
     refreshSingleAccount,
     showFeedback,

@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.util.PersonWorkItem
 import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
@@ -59,23 +60,41 @@ data class BackupAccountRecord(
 )
 
 @JsonClass(generateAdapter = true)
+data class BackupPersonRecord(
+    val id: Long? = null,
+    val folderId: Long? = null,
+    val name: String? = null,
+    val role: String? = null,
+    val avatarUrl: String? = null,
+    val bio: String? = null,
+    val userNote: String? = null,
+    val tags: String? = null,
+    val worksJson: String? = null,
+    val works: List<PersonWorkItem>? = null,
+    val isFavorite: Boolean? = null,
+    val savedAt: Long? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class RawBackupEnvelope(
     val app: String? = null,
     val version: Int? = null,
     val exportedAt: String? = null,
     val folders: List<BackupFolderRecord>? = null,
     val bookmarks: List<BackupBookmarkRecord>? = null,
-    val accounts: List<BackupAccountRecord>? = null
+    val accounts: List<BackupAccountRecord>? = null,
+    val people: List<BackupPersonRecord>? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class BackupPayload(
     val app: String = "X Folders",
-    val version: Int = 2,
+    val version: Int = 3,
     val exportedAt: String,
     val folders: List<FolderEntity>,
     val bookmarks: List<TweetBookmarkEntity>,
-    val accounts: List<AccountBookmarkEntity> = emptyList()
+    val accounts: List<AccountBookmarkEntity> = emptyList(),
+    val people: List<PersonEntity> = emptyList()
 )
 
 enum class RestoreMode {
@@ -86,7 +105,8 @@ enum class RestoreMode {
 data class RestoreSummary(
     val foldersAdded: Int,
     val bookmarksAdded: Int,
-    val accountsAdded: Int = 0
+    val accountsAdded: Int = 0,
+    val peopleAdded: Int = 0
 )
 
 enum class ThemeMode(val key: String) {

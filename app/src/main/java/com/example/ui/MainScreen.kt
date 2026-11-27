@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FolderSpecial
@@ -59,8 +60,12 @@ import com.example.ui.components.FolderCard
 import com.example.ui.components.FolderFilterBar
 import com.example.ui.components.MoveAccountDialog
 import com.example.ui.components.MoveBookmarkDialog
+import com.example.ui.components.MovePersonDialog
+import com.example.ui.components.PersonCard
+import com.example.ui.components.PersonDetailSheet
 import com.example.ui.components.SaveAccountBottomSheet
 import com.example.ui.components.SaveBookmarkBottomSheet
+import com.example.ui.components.SavePersonBottomSheet
 import com.example.ui.components.SettingsScreen
 import com.example.ui.components.TopAppBarSection
 import com.example.ui.components.TweetCard
@@ -73,10 +78,14 @@ fun MainScreen(viewModel: BookmarkViewModel) {
     val totalBookmarksCount by viewModel.totalBookmarksCount.collectAsStateWithLifecycle()
     val accounts by viewModel.filteredAccounts.collectAsStateWithLifecycle()
     val totalAccountsCount by viewModel.totalAccountsCount.collectAsStateWithLifecycle()
+    val people by viewModel.filteredPeople.collectAsStateWithLifecycle()
+    val totalPeopleCount by viewModel.totalPeopleCount.collectAsStateWithLifecycle()
     val selectedFolderId by viewModel.selectedFolderId.collectAsStateWithLifecycle()
     val showFavoritesOnly by viewModel.showFavoritesOnly.collectAsStateWithLifecycle()
     val selectedAccountFolderId by viewModel.selectedAccountFolderId.collectAsStateWithLifecycle()
     val showAccountFavoritesOnly by viewModel.showAccountFavoritesOnly.collectAsStateWithLifecycle()
+    val selectedPersonFolderId by viewModel.selectedPersonFolderId.collectAsStateWithLifecycle()
+    val showPersonFavoritesOnly by viewModel.showPersonFavoritesOnly.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -100,6 +109,12 @@ fun MainScreen(viewModel: BookmarkViewModel) {
     val pendingAccountNote by viewModel.pendingAccountNote.collectAsStateWithLifecycle()
     val pendingAccountTags by viewModel.pendingAccountTags.collectAsStateWithLifecycle()
 
+    val isPersonSheetOpen by viewModel.isPersonSheetOpen.collectAsStateWithLifecycle()
+    val personToEdit by viewModel.personToEdit.collectAsStateWithLifecycle()
+    val pendingPersonFolderId by viewModel.pendingPersonFolderId.collectAsStateWithLifecycle()
+    val selectedPersonForDetail by viewModel.selectedPersonForDetail.collectAsStateWithLifecycle()
+    val personDetailAutoFocusWork by viewModel.personDetailAutoFocusWork.collectAsStateWithLifecycle()
+
     val refreshingIds by viewModel.refreshingBookmarkIds.collectAsStateWithLifecycle()
     val refreshingAccountIds by viewModel.refreshingAccountIds.collectAsStateWithLifecycle()
     val showCreateFolderDialog by viewModel.showCreateFolderDialog.collectAsStateWithLifecycle()
@@ -107,6 +122,7 @@ fun MainScreen(viewModel: BookmarkViewModel) {
     val folderToDelete by viewModel.folderToDelete.collectAsStateWithLifecycle()
     val bookmarkToMove by viewModel.bookmarkToMove.collectAsStateWithLifecycle()
     val accountToMove by viewModel.accountToMove.collectAsStateWithLifecycle()
+    val personToMove by viewModel.personToMove.collectAsStateWithLifecycle()
     val feedbackMessage by viewModel.userFeedbackMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -126,6 +142,7 @@ fun MainScreen(viewModel: BookmarkViewModel) {
             TopAppBarSection(
                 totalBookmarks = totalBookmarksCount,
                 totalAccounts = totalAccountsCount,
+                totalPeople = totalPeopleCount,
                 searchQuery = searchQuery,
                 onSearchQueryChange = viewModel::setSearchQuery,
                 activeTab = activeTab,
@@ -161,6 +178,16 @@ fun MainScreen(viewModel: BookmarkViewModel) {
                         shape = RoundedCornerShape(16.dp),
                         icon = { Icon(imageVector = Icons.Filled.PersonAdd, contentDescription = null) },
                         text = { Text("حفظ حساب", fontWeight = FontWeight.Bold) }
+                    )
+                }
+                MainTab.PEOPLE -> {
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.openAddPersonSheet() },
+                        containerColor = XBlue,
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp),
+                        icon = { Icon(imageVector = Icons.Filled.PersonAdd, contentDescription = null) },
+                        text = { Text("حفظ شخص", fontWeight = FontWeight.Bold) }
                     )
                 }
                 MainTab.FOLDERS -> {
@@ -285,6 +312,58 @@ fun MainScreen(viewModel: BookmarkViewModel) {
                     }
                 }
 
+                MainTab.PEOPLE -> {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        FolderFilterBar(
+                            folders = folders,
+                            selectedFolderId = selectedPersonFolderId,
+                            showFavoritesOnly = showPersonFavoritesOnly,
+                            totalBookmarksCount = totalPeopleCount,
+                            onSelectAll = { viewModel.selectPersonFolder(null) },
+                            onToggleFavorites = { viewModel.togglePersonFavoritesOnly() },
+                            onSelectFolder = { viewModel.selectPersonFolder(it) },
+                            onAddNewFolder = { viewModel.openCreateFolderDialog() },
+                            allLabel = "كل الأشخاص",
+                            allIcon = "🎭",
+                            getFolderCount = { it.peopleCount }
+                        )
+
+                        if (people.isEmpty()) {
+                            EmptyPeopleView(
+                                hasSearch = searchQuery.isNotBlank(),
+                                onClearSearch = { viewModel.setSearchQuery("") },
+                                onAddFirstPerson = { viewModel.openAddPersonSheet() }
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 4.dp,
+                                    bottom = 96.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(items = people, key = { it.id }) { person ->
+                                    val folder = folders.firstOrNull { it.folder.id == person.folderId }?.folder
+                                    PersonCard(
+                                        person = person,
+                                        folder = folder,
+                                        onOpenDetail = { viewModel.openPersonDetail(person, autoFocusWork = false) },
+                                        onQuickAddWork = { viewModel.openPersonDetail(person, autoFocusWork = true) },
+                                        onEdit = { viewModel.openEditPersonSheet(person) },
+                                        onToggleFavorite = { viewModel.togglePersonFavorite(person) },
+                                        onMoveToFolder = { viewModel.openMovePersonDialog(person) },
+                                        onDelete = { viewModel.deletePerson(person.id) },
+                                        onFeedback = viewModel::showFeedback
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 MainTab.FOLDERS -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -301,6 +380,7 @@ fun MainScreen(viewModel: BookmarkViewModel) {
                                 totalFolders = folders.size,
                                 totalBookmarks = totalBookmarksCount,
                                 totalAccounts = totalAccountsCount,
+                                totalPeople = totalPeopleCount,
                                 onCreateFolder = { viewModel.openCreateFolderDialog() }
                             )
                         }
@@ -321,6 +401,7 @@ fun MainScreen(viewModel: BookmarkViewModel) {
                         totalFolders = folders.size,
                         totalBookmarks = totalBookmarksCount,
                         totalAccounts = totalAccountsCount,
+                        totalPeople = totalPeopleCount,
                         lastBackupAt = lastBackupAt,
                         themeMode = themeMode,
                         onSetThemeMode = viewModel::setThemeMode,
@@ -415,6 +496,48 @@ fun MainScreen(viewModel: BookmarkViewModel) {
             onConfirmMove = viewModel::moveAccountToFolder
         )
     }
+
+    personToMove?.let { person ->
+        MovePersonDialog(
+            person = person,
+            folders = folders,
+            onDismiss = viewModel::closeMovePersonDialog,
+            onConfirmMove = viewModel::movePersonToFolder
+        )
+    }
+
+    if (isPersonSheetOpen) {
+        SavePersonBottomSheet(
+            personToEdit = personToEdit,
+            folders = folders,
+            selectedFolderId = pendingPersonFolderId,
+            onSelectFolder = viewModel::setPendingPersonFolderId,
+            onOpenCreateFolder = viewModel::openCreateFolderDialog,
+            onSave = viewModel::savePerson,
+            onDismiss = viewModel::closePersonSheet
+        )
+    }
+
+    selectedPersonForDetail?.let { person ->
+        val folder = folders.firstOrNull { it.folder.id == person.folderId }?.folder
+        PersonDetailSheet(
+            person = person,
+            folder = folder,
+            autoFocusWorkForm = personDetailAutoFocusWork,
+            onEditProfile = {
+                viewModel.closePersonDetail()
+                viewModel.openEditPersonSheet(person)
+            },
+            onAddWork = { type, title, url, note ->
+                viewModel.addPersonWork(person, type, title, url, note)
+            },
+            onRemoveWork = { workId ->
+                viewModel.removePersonWork(person, workId)
+            },
+            onFeedback = viewModel::showFeedback,
+            onDismiss = viewModel::closePersonDetail
+        )
+    }
 }
 
 @Composable
@@ -422,6 +545,7 @@ private fun FoldersManagerHeader(
     totalFolders: Int,
     totalBookmarks: Int,
     totalAccounts: Int,
+    totalPeople: Int,
     onCreateFolder: () -> Unit
 ) {
     Surface(
@@ -459,12 +583,12 @@ private fun FoldersManagerHeader(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "مجموعات العلامات والحسابات",
+                            text = "مجموعات المحتوى والأشخاص",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "$totalFolders مجموعات · $totalBookmarks علامة مرجعية · $totalAccounts حساب",
+                            text = "$totalFolders مجموعات · $totalBookmarks علامة · $totalAccounts حساب · $totalPeople شخص",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -488,7 +612,7 @@ private fun FoldersManagerHeader(
             }
 
             Text(
-                text = "ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك وحساباتك المفضلة وسهولة الرجوع إليها في أي وقت.",
+                text = "ميزة المجموعات لتنظيم التغريدات والحسابات وملفات الأشخاص وأعمالهم في مكان واحد.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -651,6 +775,86 @@ private fun EmptyAccountsView(
                 Icon(imageVector = Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("حفظ حساب الآن", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyPeopleView(
+    hasSearch: Boolean,
+    onClearSearch: () -> Unit,
+    onAddFirstPerson: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .clip(CircleShape)
+                .background(XBlue.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Badge,
+                contentDescription = null,
+                tint = XBlue,
+                modifier = Modifier.size(36.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        if (hasSearch) {
+            Text(
+                text = "لم يتم العثور على أشخاص مطابقين",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "جرب البحث باسم آخر أو مهنة مختلفة أو مسح نص البحث الحالي",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = onClearSearch,
+                colors = ButtonDefaults.buttonColors(containerColor = XBlue.copy(alpha = 0.14f), contentColor = XBlue),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("مسح البحث", fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Text(
+                text = "لا يوجد أشخاص محفوظون في هذه المجموعة",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "أضف ملفات شخصية عامة (مثل الممثلين والمخرجين والكتّاب) مع صورهم ثم أضف روابط أعمالهم وصورهم وفيديوهاتهم.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = onAddFirstPerson,
+                colors = ButtonDefaults.buttonColors(containerColor = XBlue),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(imageVector = Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("إضافة شخص الآن", fontWeight = FontWeight.Bold)
             }
         }
     }

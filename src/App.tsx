@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Bookmark, FolderPlus, FolderHeart, Plus, UserPlus, Users } from 'lucide-react';
+import {
+  Bookmark,
+  ContactRound,
+  FolderHeart,
+  FolderPlus,
+  Plus,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import { AccountCard } from './components/AccountCard';
 import { FolderCard } from './components/FolderCard';
 import {
@@ -8,10 +16,14 @@ import {
   EditFolderDialog,
   MoveAccountDialog,
   MoveBookmarkDialog,
+  MovePersonDialog,
 } from './components/FolderDialogs';
 import { FolderFilterBar } from './components/FolderFilterBar';
+import { PersonCard } from './components/PersonCard';
+import { PersonDetailModal } from './components/PersonDetailModal';
 import { SaveAccountSheet } from './components/SaveAccountSheet';
 import { SaveBookmarkSheet } from './components/SaveBookmarkSheet';
+import { SavePersonSheet } from './components/SavePersonSheet';
 import { SettingsView } from './components/SettingsView';
 import { TopAppBarSection } from './components/TopAppBarSection';
 import { TweetCard } from './components/TweetCard';
@@ -62,6 +74,7 @@ export function App() {
       <TopAppBarSection
         totalBookmarks={store.totalBookmarksCount}
         totalAccounts={store.totalAccountsCount}
+        totalPeople={store.totalPeopleCount}
         searchQuery={store.searchQuery}
         onSearchQueryChange={store.setSearchQuery}
         activeTab={store.activeTab}
@@ -173,12 +186,62 @@ export function App() {
               )}
             </div>
           </>
+        ) : store.activeTab === 'PEOPLE' ? (
+          <>
+            <FolderFilterBar
+              folders={store.folders}
+              selectedFolderId={store.selectedPersonFolderId}
+              showFavoritesOnly={store.showPersonFavoritesOnly}
+              totalBookmarksCount={store.totalPeopleCount}
+              allLabel="كل الأشخاص"
+              allIcon="🧑"
+              getFolderCount={(item) => item.peopleCount}
+              onSelectAll={() => store.selectPersonFolder(null)}
+              onToggleFavorites={store.togglePersonFavoritesOnly}
+              onSelectFolder={(id) => store.selectPersonFolder(id)}
+              onAddNewFolder={store.openCreateFolderDialog}
+            />
+
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-1">
+              {store.people.length === 0 ? (
+                <EmptyPeopleView
+                  hasSearch={store.searchQuery.trim().length > 0}
+                  onClearSearch={() => store.setSearchQuery('')}
+                  onAddFirstPerson={store.openAddPersonSheet}
+                />
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                  {store.people.map((person) => {
+                    const folder = store.folders.find(
+                      (item) => item.folder.id === person.folderId
+                    )?.folder;
+                    return (
+                      <PersonCard
+                        key={person.id}
+                        person={person}
+                        folder={folder}
+                        onOpenProfile={(autoFocus) =>
+                          store.openPersonDetail(person, Boolean(autoFocus))
+                        }
+                        onEdit={() => store.openEditPersonSheet(person)}
+                        onToggleFavorite={() => store.togglePersonFavorite(person)}
+                        onMoveToFolder={() => store.openMovePersonDialog(person)}
+                        onDelete={() => store.deletePerson(person.id)}
+                        onFeedback={store.showFeedback}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
         ) : store.activeTab === 'FOLDERS' ? (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 space-y-4">
             <FoldersManagerHeader
               totalFolders={store.folders.length}
               totalBookmarks={store.totalBookmarksCount}
               totalAccounts={store.totalAccountsCount}
+              totalPeople={store.totalPeopleCount}
               onCreateFolder={store.openCreateFolderDialog}
             />
 
@@ -199,6 +262,7 @@ export function App() {
             totalFolders={store.folders.length}
             totalBookmarks={store.totalBookmarksCount}
             totalAccounts={store.totalAccountsCount}
+            totalPeople={store.totalPeopleCount}
             lastBackupAt={store.lastBackupAt}
             isDarkMode={isDarkMode}
             onSetDarkMode={setIsDarkMode}
@@ -229,6 +293,15 @@ export function App() {
             >
               <UserPlus className="w-5 h-5" />
               <span>حفظ حساب</span>
+            </button>
+          ) : store.activeTab === 'PEOPLE' ? (
+            <button
+              type="button"
+              onClick={store.openAddPersonSheet}
+              className="h-14 px-5 rounded-2xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white font-bold text-sm sm:text-base shadow-lg shadow-[#1D9BF0]/30 flex items-center gap-2 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9BF0]"
+            >
+              <UserPlus className="w-5 h-5" />
+              <span>حفظ شخص</span>
             </button>
           ) : (
             <button
@@ -296,6 +369,49 @@ export function App() {
         />
       )}
 
+      {/* Save / Edit Person Sheet */}
+      {store.isPersonSheetOpen && (
+        <SavePersonSheet
+          personToEdit={store.personToEdit}
+          folders={store.folders}
+          selectedFolderId={store.pendingPersonFolderId}
+          onSelectFolder={store.setPendingPersonFolderId}
+          onOpenCreateFolder={store.openCreateFolderDialog}
+          onSave={store.savePerson}
+          onDismiss={store.closePersonSheet}
+          onFeedback={store.showFeedback}
+        />
+      )}
+
+      {/* Person Profile & Works Modal */}
+      {store.personDetailTarget && (
+        <PersonDetailModal
+          person={store.personDetailTarget}
+          folder={
+            store.folders.find(
+              (item) => item.folder.id === store.personDetailTarget?.folderId
+            )?.folder
+          }
+          autoFocusAddWork={store.personDetailAutoFocusWork}
+          onEditPerson={() => {
+            const target = store.personDetailTarget;
+            if (target) store.openEditPersonSheet(target);
+          }}
+          onAddWork={(draft) =>
+            store.personDetailTarget
+              ? store.addPersonWork(store.personDetailTarget.id, draft)
+              : false
+          }
+          onRemoveWork={(workId) => {
+            if (store.personDetailTarget) {
+              store.removePersonWork(store.personDetailTarget.id, workId);
+            }
+          }}
+          onDismiss={store.closePersonDetail}
+          onFeedback={store.showFeedback}
+        />
+      )}
+
       {/* Folder & Move Dialogs */}
       {store.showCreateFolderDialog && (
         <CreateFolderDialog
@@ -339,6 +455,15 @@ export function App() {
           onConfirmMove={store.moveAccountToFolder}
         />
       )}
+
+      {store.personToMove && (
+        <MovePersonDialog
+          person={store.personToMove}
+          folders={store.folders}
+          onDismiss={store.closeMovePersonDialog}
+          onConfirmMove={store.movePersonToFolder}
+        />
+      )}
     </div>
   );
 }
@@ -347,11 +472,13 @@ function FoldersManagerHeader({
   totalFolders,
   totalBookmarks,
   totalAccounts,
+  totalPeople,
   onCreateFolder,
 }: {
   totalFolders: number;
   totalBookmarks: number;
   totalAccounts: number;
+  totalPeople: number;
   onCreateFolder: () => void;
 }) {
   return (
@@ -363,10 +490,10 @@ function FoldersManagerHeader({
           </div>
           <div>
             <h2 className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]">
-              مجموعات العلامات المرجعية والحسابات
+              مجموعات العلامات المرجعية والحسابات والأشخاص
             </h2>
             <p className="text-xs text-[#536471] dark:text-[#8B949E] tabular-nums">
-              {totalFolders} مجموعات · {totalBookmarks} علامة مرجعية · {totalAccounts} حساب
+              {totalFolders} مجموعات · {totalBookmarks} علامة مرجعية · {totalAccounts} حساب · {totalPeople} شخص
             </p>
           </div>
         </div>
@@ -382,7 +509,7 @@ function FoldersManagerHeader({
       </div>
 
       <p className="text-xs sm:text-sm text-[#536471] dark:text-[#8B949E] leading-relaxed">
-        ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك وحساباتك المفضلة وسهولة الرجوع إليها في أي وقت.
+        ميزة مجموعات العلامات المرجعية مستوحاة من ميزة X Premium لتنظيم تغريداتك وحساباتك وملفات الأشخاص وسهولة الرجوع إليها في أي وقت.
       </p>
     </div>
   );
@@ -487,6 +614,59 @@ function EmptyAccountsView({
           >
             <UserPlus className="w-4 h-4" />
             <span>حفظ حساب الآن</span>
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function EmptyPeopleView({
+  hasSearch,
+  onClearSearch,
+  onAddFirstPerson,
+}: {
+  hasSearch: boolean;
+  onClearSearch: () => void;
+  onAddFirstPerson: () => void;
+}) {
+  return (
+    <div className="py-16 px-4 flex flex-col items-center justify-center text-center max-w-md mx-auto gap-3.5">
+      <div className="w-20 h-20 rounded-full bg-[#1D9BF0]/12 border-2 border-[#1D9BF0]/30 text-[#1D9BF0] flex items-center justify-center">
+        <ContactRound className="w-9 h-9" />
+      </div>
+
+      {hasSearch ? (
+        <>
+          <h3 className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]">
+            لم يتم العثور على أشخاص مطابقين
+          </h3>
+          <p className="text-sm text-[#536471] dark:text-[#8B949E]">
+            جرب البحث باسم آخر أو مسح نص البحث الحالي
+          </p>
+          <button
+            type="button"
+            onClick={onClearSearch}
+            className="min-h-[42px] px-5 py-2 rounded-xl bg-[#1D9BF0]/15 hover:bg-[#1D9BF0]/25 text-[#1D9BF0] font-bold text-sm transition-colors"
+          >
+            مسح البحث
+          </button>
+        </>
+      ) : (
+        <>
+          <h3 className="text-base font-bold text-[#0F1419] dark:text-[#F0F6FC]">
+            لا يوجد أشخاص في هذه المجموعة
+          </h3>
+          <p className="text-sm text-[#536471] dark:text-[#8B949E] leading-relaxed">
+            أضف ملفات لأي شخص (ممثل، مخرج، كاتب، شخصية عامة) مع صورته، ثم أضف روابط أعماله وصوره وفيديوهاته داخل ملفه.
+          </p>
+          <button
+            type="button"
+            onClick={onAddFirstPerson}
+            className="mt-1 min-h-[44px] px-5 py-2.5 rounded-xl bg-[#1D9BF0] hover:bg-[#1A8CD8] text-white font-bold text-sm flex items-center gap-2 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>إضافة شخص الآن</span>
           </button>
         </>
       )}

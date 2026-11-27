@@ -5,14 +5,20 @@ import type {
   FolderWithCount,
   ParsedAccount,
   ParsedTweet,
+  PersonEntity,
+  PersonWorkItem,
+  PersonWorkType,
   TweetBookmarkEntity,
 } from '../types/bookmark';
+import { buildPersonDedupeKey } from '../utils/personUtils';
 import { TweetParser } from '../utils/tweetParser';
 
 const FOLDERS_STORAGE_KEY = 'xfolders_folders_v1';
 const BOOKMARKS_STORAGE_KEY = 'xfolders_bookmarks_v1';
 const ACCOUNTS_STORAGE_KEY = 'xfolders_accounts_v1';
 const ACCOUNTS_SEEDED_KEY = 'xfolders_accounts_seeded_v1';
+const PEOPLE_STORAGE_KEY = 'xfolders_people_v1';
+const PEOPLE_SEEDED_KEY = 'xfolders_people_seeded_v1';
 const LAST_BACKUP_STORAGE_KEY = 'xfolders_last_backup_at_v1';
 
 function nextId(items: { id: number }[]): number {
@@ -64,6 +70,21 @@ function writeAccounts(accounts: AccountBookmarkEntity[]): void {
   localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
 }
 
+function readPeople(): PersonEntity[] {
+  try {
+    const raw = localStorage.getItem(PEOPLE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as PersonEntity[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePeople(people: PersonEntity[]): void {
+  localStorage.setItem(PEOPLE_STORAGE_KEY, JSON.stringify(people));
+}
+
 function findFolderIdOrDefault(folders: FolderEntity[], preferredName: string, fallbackId: number): number {
   const byName = folders.find((f) => f.name.trim() === preferredName);
   if (byName) return byName.id;
@@ -77,10 +98,12 @@ export const BookmarkRepository = {
     folders: FolderEntity[];
     bookmarks: TweetBookmarkEntity[];
     accounts: AccountBookmarkEntity[];
+    people: PersonEntity[];
   } {
     let folders = readFolders();
     let bookmarks = readBookmarks();
     let accounts = readAccounts();
+    let people = readPeople();
 
     if (folders.length === 0) {
       const now = Date.now();
@@ -258,10 +281,76 @@ export const BookmarkRepository = {
       }
     }
 
+    const peopleAlreadySeeded =
+      typeof localStorage !== 'undefined' && localStorage.getItem(PEOPLE_SEEDED_KEY) === '1';
+
+    if (people.length === 0 && !peopleAlreadySeeded) {
+      const now = Date.now();
+      people = [
+        {
+          id: 1,
+          folderId: findFolderIdOrDefault(folders, 'أفكار وإلهام', 3),
+          name: 'كريستوفر نولان',
+          role: 'مخرج وكاتب سيناريو',
+          bio: 'مخرج بريطاني أمريكي اشتهر بأفلامه ذات السرد غير الخطي والمؤثرات العملية مثل Inception و Interstellar و Oppenheimer.',
+          userNote: 'مرجع لأفضل الأعمال السينمائية والمقابلات الإخراجية',
+          tags: 'سينما,إخراج,أفلام',
+          isFavorite: true,
+          savedAt: now - 1000,
+          works: [
+            {
+              id: 'seed_work_1',
+              type: 'link',
+              title: 'صفحة الأعمال على IMDb',
+              url: 'https://www.imdb.com/name/nm0634240/',
+              note: 'قائمة الأفلام والجوائز كاملة',
+              addedAt: now - 900,
+            },
+            {
+              id: 'seed_work_2',
+              type: 'video',
+              title: 'مقابلة حول صناعة Interstellar',
+              url: 'https://www.youtube.com/watch?v=zSWdZVtXT7E',
+              note: 'مقطع تعريفي بالعمل',
+              addedAt: now - 800,
+            },
+          ],
+        },
+        {
+          id: 2,
+          folderId: findFolderIdOrDefault(folders, 'أفكار وإلهام', 3),
+          name: 'أحمد حلمي',
+          role: 'ممثل ومنتج',
+          bio: 'ممثل مصري بارز قدم العديد من الأعمال الكوميدية والدرامية الناجحة في السينما العربية.',
+          userNote: 'متابعة أحدث الأفلام والمشاريع الفنية',
+          tags: 'ممثل,سينما_عربية,كوميديا',
+          isFavorite: false,
+          savedAt: now - 2000,
+          works: [
+            {
+              id: 'seed_work_3',
+              type: 'link',
+              title: 'السيرة والأعمال الكاملة',
+              url: 'https://elcinema.com/person/1039784/',
+              note: 'بيانات الأفلام والمسلسلات',
+              addedAt: now - 1900,
+            },
+          ],
+        },
+      ];
+      writePeople(people);
+      try {
+        localStorage.setItem(PEOPLE_SEEDED_KEY, '1');
+      } catch {
+        // ignore storage errors
+      }
+    }
+
     return {
       folders: this.sortFolders(folders),
       bookmarks: this.sortBookmarks(bookmarks),
       accounts: this.sortAccounts(accounts),
+      people: this.sortPeople(people),
     };
   },
 
@@ -280,6 +369,10 @@ export const BookmarkRepository = {
     return [...accounts].sort((a, b) => b.savedAt - a.savedAt);
   },
 
+  sortPeople(people: PersonEntity[]): PersonEntity[] {
+    return [...people].sort((a, b) => b.savedAt - a.savedAt);
+  },
+
   getAllFolders(): FolderEntity[] {
     return this.sortFolders(readFolders());
   },
@@ -292,15 +385,21 @@ export const BookmarkRepository = {
     return this.sortAccounts(readAccounts());
   },
 
+  getAllPeople(): PersonEntity[] {
+    return this.sortPeople(readPeople());
+  },
+
   getFoldersWithCount(
     folders: FolderEntity[],
     bookmarks: TweetBookmarkEntity[],
-    accounts: AccountBookmarkEntity[] = []
+    accounts: AccountBookmarkEntity[] = [],
+    people: PersonEntity[] = []
   ): FolderWithCount[] {
     return folders.map((folder) => ({
       folder,
       count: bookmarks.filter((b) => b.folderId === folder.id).length,
       accountCount: accounts.filter((a) => a.folderId === folder.id).length,
+      peopleCount: people.filter((p) => p.folderId === folder.id).length,
     }));
   },
 
@@ -324,6 +423,7 @@ export const BookmarkRepository = {
     const folders = readFolders();
     let bookmarks = readBookmarks();
     let accounts = readAccounts();
+    let people = readPeople();
 
     if (moveToGeneral) {
       const defaultFolder = folders.find((f) => f.isDefault);
@@ -335,14 +435,19 @@ export const BookmarkRepository = {
         accounts = accounts.map((a) =>
           a.folderId === folderId ? { ...a, folderId: targetId } : a
         );
+        people = people.map((p) =>
+          p.folderId === folderId ? { ...p, folderId: targetId } : p
+        );
       }
     } else {
       bookmarks = bookmarks.filter((b) => b.folderId !== folderId);
       accounts = accounts.filter((a) => a.folderId !== folderId);
+      people = people.filter((p) => p.folderId !== folderId);
     }
 
     writeBookmarks(bookmarks);
     writeAccounts(accounts);
+    writePeople(people);
     writeFolders(folders.filter((f) => f.id !== folderId));
   },
 
@@ -470,6 +575,79 @@ export const BookmarkRepository = {
     writeAccounts(accounts);
   },
 
+  // People CRUD
+  insertPerson(input: Omit<PersonEntity, 'id' | 'savedAt'>): PersonEntity {
+    const people = readPeople();
+    const newPerson: PersonEntity = {
+      ...input,
+      id: nextId(people),
+      savedAt: Date.now(),
+    };
+    writePeople([newPerson, ...people]);
+    try {
+      localStorage.setItem(PEOPLE_SEEDED_KEY, '1');
+    } catch {
+      // ignore storage errors
+    }
+    return newPerson;
+  },
+
+  updatePerson(updated: PersonEntity): void {
+    const people = readPeople().map((p) => (p.id === updated.id ? updated : p));
+    writePeople(people);
+  },
+
+  deletePerson(id: number): void {
+    const people = readPeople().filter((p) => p.id !== id);
+    writePeople(people);
+  },
+
+  togglePersonFavorite(id: number): void {
+    const people = readPeople().map((p) =>
+      p.id === id ? { ...p, isFavorite: !p.isFavorite } : p
+    );
+    writePeople(people);
+  },
+
+  movePerson(id: number, newFolderId: number): void {
+    const people = readPeople().map((p) =>
+      p.id === id ? { ...p, folderId: newFolderId } : p
+    );
+    writePeople(people);
+  },
+
+  addWorkToPerson(personId: number, work: PersonWorkItem): PersonEntity | null {
+    let updatedTarget: PersonEntity | null = null;
+    const people = readPeople().map((p) => {
+      if (p.id !== personId) return p;
+      updatedTarget = {
+        ...p,
+        works: [work, ...p.works],
+      };
+      return updatedTarget;
+    });
+    if (updatedTarget) {
+      writePeople(people);
+    }
+    return updatedTarget;
+  },
+
+  removeWorkFromPerson(personId: number, workId: string): PersonEntity | null {
+    let updatedTarget: PersonEntity | null = null;
+    const people = readPeople().map((p) => {
+      if (p.id !== personId) return p;
+      updatedTarget = {
+        ...p,
+        works: p.works.filter((w) => w.id !== workId),
+      };
+      return updatedTarget;
+    });
+    if (updatedTarget) {
+      writePeople(people);
+    }
+    return updatedTarget;
+  },
+
   getLastBackupAt(): string | null {
     try {
       return localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
@@ -496,6 +674,7 @@ export const BookmarkRepository = {
       folders: this.getAllFolders(),
       bookmarks: this.getAllBookmarks(),
       accounts: this.getAllAccounts(),
+      people: this.getAllPeople(),
     };
   },
 
@@ -604,7 +783,72 @@ export const BookmarkRepository = {
         }
       }
 
-      if (validFolders.length === 0 && validBookmarks.length === 0 && validAccounts.length === 0) {
+      const validPeople: PersonEntity[] = [];
+      if (Array.isArray(parsed.people)) {
+        for (const raw of parsed.people) {
+          if (!raw || typeof raw !== 'object') continue;
+          const item = raw as Record<string, unknown>;
+          const name = typeof item.name === 'string' ? item.name.trim() : '';
+          if (!name) continue;
+          const validWorks: PersonWorkItem[] = [];
+          let rawWorksSource: unknown[] = [];
+          if (Array.isArray(item.works)) {
+            rawWorksSource = item.works;
+          } else if (typeof item.worksJson === 'string' && item.worksJson.trim()) {
+            try {
+              const decodedWorks = JSON.parse(item.worksJson);
+              if (Array.isArray(decodedWorks)) {
+                rawWorksSource = decodedWorks;
+              }
+            } catch {
+              rawWorksSource = [];
+            }
+          }
+          for (const rawWork of rawWorksSource) {
+            if (!rawWork || typeof rawWork !== 'object') continue;
+            const w = rawWork as Record<string, unknown>;
+            const wUrl = typeof w.url === 'string' ? w.url.trim() : '';
+            if (!wUrl) continue;
+            const wType: PersonWorkType =
+              w.type === 'link' || w.type === 'photo' || w.type === 'video' || w.type === 'other'
+                ? w.type
+                : 'link';
+            validWorks.push({
+              id:
+                typeof w.id === 'string' && w.id.trim()
+                  ? w.id
+                  : `work_${now}_${validWorks.length + 1}`,
+              type: wType,
+              title:
+                typeof w.title === 'string' && w.title.trim() ? w.title.trim() : wUrl,
+              url: wUrl,
+              note: typeof w.note === 'string' && w.note.trim() ? w.note.trim() : undefined,
+              addedAt:
+                typeof w.addedAt === 'number' && Number.isFinite(w.addedAt) ? w.addedAt : now,
+            });
+          }
+          validPeople.push({
+            id: typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : validPeople.length + 1,
+            folderId: typeof item.folderId === 'number' && Number.isFinite(item.folderId) ? item.folderId : 1,
+            name,
+            role: typeof item.role === 'string' ? item.role.trim() : '',
+            avatarUrl: typeof item.avatarUrl === 'string' && item.avatarUrl.trim() ? item.avatarUrl.trim() : undefined,
+            bio: typeof item.bio === 'string' ? item.bio : '',
+            userNote: typeof item.userNote === 'string' && item.userNote.trim() ? item.userNote.trim() : undefined,
+            tags: typeof item.tags === 'string' ? item.tags : '',
+            works: validWorks,
+            isFavorite: Boolean(item.isFavorite),
+            savedAt: typeof item.savedAt === 'number' && Number.isFinite(item.savedAt) ? item.savedAt : now,
+          });
+        }
+      }
+
+      if (
+        validFolders.length === 0 &&
+        validBookmarks.length === 0 &&
+        validAccounts.length === 0 &&
+        validPeople.length === 0
+      ) {
         return null;
       }
 
@@ -615,6 +859,7 @@ export const BookmarkRepository = {
         folders: validFolders,
         bookmarks: validBookmarks,
         accounts: validAccounts,
+        people: validPeople,
       };
     } catch {
       return null;
@@ -624,8 +869,9 @@ export const BookmarkRepository = {
   restoreBackup(
     payload: BackupPayload,
     mode: 'replace' | 'merge'
-  ): { foldersAdded: number; bookmarksAdded: number; accountsAdded: number } {
+  ): { foldersAdded: number; bookmarksAdded: number; accountsAdded: number; peopleAdded: number } {
     const incomingAccounts = payload.accounts ?? [];
+    const incomingPeople = payload.people ?? [];
 
     if (mode === 'replace') {
       let folders: FolderEntity[] = payload.folders.map((f, idx) => ({
@@ -686,11 +932,22 @@ export const BookmarkRepository = {
         };
       });
 
+      const people: PersonEntity[] = incomingPeople.map((p, idx) => {
+        const mappedFolderId = folderIdMap.get(p.folderId) ?? p.folderId;
+        return {
+          ...p,
+          id: idx + 1,
+          folderId: validFolderIdSet.has(mappedFolderId) ? mappedFolderId : defaultFolderId,
+        };
+      });
+
       writeFolders(folders);
       writeBookmarks(bookmarks);
       writeAccounts(accounts);
+      writePeople(people);
       try {
         localStorage.setItem(ACCOUNTS_SEEDED_KEY, '1');
+        localStorage.setItem(PEOPLE_SEEDED_KEY, '1');
       } catch {
         // ignore storage errors
       }
@@ -698,6 +955,7 @@ export const BookmarkRepository = {
         foldersAdded: folders.length,
         bookmarksAdded: bookmarks.length,
         accountsAdded: accounts.length,
+        peopleAdded: people.length,
       };
     }
 
@@ -705,6 +963,7 @@ export const BookmarkRepository = {
     const existingFolders = readFolders();
     const existingBookmarks = readBookmarks();
     const existingAccounts = readAccounts();
+    const existingPeople = readPeople();
 
     const defaultFolder = existingFolders.find((f) => f.isDefault) ?? existingFolders[0];
     const defaultFolderId = defaultFolder?.id ?? 1;
@@ -772,14 +1031,36 @@ export const BookmarkRepository = {
       accountsAdded += 1;
     }
 
+    const existingPersonKeySet = new Set(
+      existingPeople.map((p) => buildPersonDedupeKey(p))
+    );
+    let nextPersonId = nextId(existingPeople);
+    const mergedPeople = [...existingPeople];
+    let peopleAdded = 0;
+
+    for (const incoming of incomingPeople) {
+      const key = buildPersonDedupeKey(incoming);
+      if (existingPersonKeySet.has(key)) continue;
+      existingPersonKeySet.add(key);
+      const targetFolderId = folderIdMap.get(incoming.folderId) ?? defaultFolderId;
+      mergedPeople.push({
+        ...incoming,
+        id: nextPersonId++,
+        folderId: targetFolderId,
+      });
+      peopleAdded += 1;
+    }
+
     writeFolders(mergedFolders);
     writeBookmarks(mergedBookmarks);
     writeAccounts(mergedAccounts);
+    writePeople(mergedPeople);
     try {
       localStorage.setItem(ACCOUNTS_SEEDED_KEY, '1');
+      localStorage.setItem(PEOPLE_SEEDED_KEY, '1');
     } catch {
       // ignore storage errors
     }
-    return { foldersAdded, bookmarksAdded, accountsAdded };
+    return { foldersAdded, bookmarksAdded, accountsAdded, peopleAdded };
   },
 };

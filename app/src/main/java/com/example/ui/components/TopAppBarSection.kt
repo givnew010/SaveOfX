@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
@@ -59,6 +60,7 @@ import com.example.ui.theme.XBlue
 fun TopAppBarSection(
     totalBookmarks: Int,
     totalAccounts: Int,
+    totalPeople: Int,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     activeTab: MainTab,
@@ -74,10 +76,10 @@ fun TopAppBarSection(
         ThemeMode.SYSTEM -> systemDark
     }
 
-    val searchPlaceholder = if (activeTab == MainTab.ACCOUNTS) {
-        "ابحث بالاسم، المعرف @، النبذة، أو الوسم…"
-    } else {
-        "ابحث في محتوى التغريدة، اسم الكاتب، الوسم…"
+    val searchPlaceholder = when (activeTab) {
+        MainTab.ACCOUNTS -> "ابحث بالاسم، المعرف @، النبذة، أو الوسم…"
+        MainTab.PEOPLE -> "ابحث بالاسم، المهنة، الأعمال، أو الوسم…"
+        else -> "ابحث في محتوى التغريدة، اسم الكاتب، الوسم…"
     }
 
     Surface(
@@ -140,7 +142,7 @@ fun TopAppBarSection(
                         }
 
                         Text(
-                            text = "$totalBookmarks علامة مرجعية · $totalAccounts حساب",
+                            text = "$totalBookmarks علامة · $totalAccounts حساب · $totalPeople شخص",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -244,6 +246,12 @@ fun TopAppBarSection(
                     onClick = { onTabSelected(MainTab.ACCOUNTS) }
                 )
                 TopTabItem(
+                    selected = activeTab == MainTab.PEOPLE,
+                    label = "الأشخاص",
+                    icon = Icons.Filled.Badge,
+                    onClick = { onTabSelected(MainTab.PEOPLE) }
+                )
+                TopTabItem(
                     selected = activeTab == MainTab.FOLDERS,
                     label = "المجموعات",
                     icon = Icons.Filled.Folder,
@@ -277,7 +285,7 @@ private fun TopTabItem(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 2.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 1.dp, vertical = 4.dp)
         ) {
             Icon(
                 imageVector = icon,
@@ -287,7 +295,7 @@ private fun TopTabItem(
             Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = label,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

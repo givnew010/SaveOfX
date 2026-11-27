@@ -109,3 +109,73 @@ test('BookmarkRepository backup & restore preserves accounts in merge and replac
   assert.equal(mergeResult.accountsAdded, 1);
   assert.ok(BookmarkRepository.getAllAccounts().some((a) => a.handle === '@ylecun'));
 });
+
+test('BookmarkRepository seeds people, supports adding/removing works after creation, and backs up people', () => {
+  localStorage.clear();
+  const seeded = BookmarkRepository.seedInitialDataIfEmpty();
+  assert.ok(seeded.people.length >= 2);
+
+  const person = BookmarkRepository.insertPerson({
+    folderId: 2,
+    name: 'ليوناردو دي كابريو',
+    role: 'ممثل',
+    avatarUrl: 'https://example.com/leo.jpg',
+    bio: 'ممثل أمريكي حائز على جائزة الأوسكار',
+    tags: 'سينما,ممثل',
+    works: [],
+    isFavorite: false,
+  });
+
+  assert.equal(person.works.length, 0);
+
+  const afterAddLink = BookmarkRepository.addWorkToPerson(person.id, {
+    id: 'w1',
+    type: 'link',
+    title: 'صفحة IMDb',
+    url: 'https://www.imdb.com/name/nm0000138/',
+    addedAt: Date.now(),
+  });
+  assert.equal(afterAddLink?.works.length, 1);
+
+  const afterAddPhoto = BookmarkRepository.addWorkToPerson(person.id, {
+    id: 'w2',
+    type: 'photo',
+    title: 'صورة رسمية',
+    url: 'https://example.com/leo-photo.jpg',
+    addedAt: Date.now(),
+  });
+  assert.equal(afterAddPhoto?.works.length, 2);
+
+  const afterRemove = BookmarkRepository.removeWorkFromPerson(person.id, 'w1');
+  assert.equal(afterRemove?.works.length, 1);
+  assert.equal(afterRemove?.works[0].id, 'w2');
+
+  const backup = BookmarkRepository.exportBackup();
+  assert.ok(backup.people && backup.people.some((p) => p.name === 'ليوناردو دي كابريو'));
+
+  const parsed = BookmarkRepository.parseBackupJson(JSON.stringify(backup));
+  assert.ok(parsed?.people);
+  assert.equal(parsed.people.length, backup.people.length);
+
+  const incomingWithNewPerson = {
+    ...parsed,
+    people: [
+      ...parsed.people,
+      {
+        id: 888,
+        folderId: 3,
+        name: 'فريد شوقي',
+        role: 'ممثل',
+        bio: 'ممثل مصري قدير',
+        tags: 'كلاسيك',
+        works: [],
+        isFavorite: true,
+        savedAt: Date.now(),
+      },
+    ],
+  };
+
+  const mergeRes = BookmarkRepository.restoreBackup(incomingWithNewPerson, 'merge');
+  assert.equal(mergeRes.peopleAdded, 1);
+  assert.ok(BookmarkRepository.getAllPeople().some((p) => p.name === 'فريد شوقي'));
+});

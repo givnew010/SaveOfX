@@ -6,14 +6,20 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [FolderEntity::class, TweetBookmarkEntity::class, AccountBookmarkEntity::class],
-    version = 3,
+    entities = [
+        FolderEntity::class,
+        TweetBookmarkEntity::class,
+        AccountBookmarkEntity::class,
+        PersonEntity::class
+    ],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun folderDao(): FolderDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun accountDao(): AccountDao
+    abstract fun personDao(): PersonDao
 
     companion object {
         @Volatile
